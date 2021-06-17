@@ -96,7 +96,7 @@ class RBF(nn.Module):
         t = torch.add(x, -1*c)
         t = torch.mul(t, t)
         t = t.sum(-1)
-        t =torch.sqrt(t)
+        t = torch.sqrt(t)
         distances = t*self.sigmas.unsqueeze(0)
         
         return self.gaussian(distances)
@@ -258,7 +258,13 @@ def train(model, optimizer: samba.optim.SGD, x: torch.Tensor, y:  torch.Tensor, 
            loss, outputs = samba.session.run(input_tensors=[s_x, s_y],output_tensors= model.output_tensors)
            sys.stdout.write('\rEpoch: %d, Loss:%f' %(epoch, samba.to_torch(loss).mean()))
 
+
+
+
+#########################################################################################
 '''
+*** The following is for the full dataset
+
 def main(argv: List[str]):
     args = parse_app_args(argv=argv, common_parser_fn=add_args, run_parser_fn=add_run_args)
 # The following code extracts data when the full dataset is used.
@@ -354,11 +360,13 @@ def main(argv: List[str]):
     E_t = np.zeros([0, 151])
     R_t = np.zeros([0, 2000])
 
+*** The above is for the full dataset
   '''
-  
+##########################################################################
  
 def main(argv: List[str]):
   args = parse_app_args(argv=argv, common_parser_fn=add_args, run_parser_fn=add_run_args)
+  # I created a smaller dataset with just 1000 points for the purpose of analysis
   tx = np.loadtxt('E.csv', delimiter = ',')
   ty = np.loadtxt('R.csv', delimiter = ',')
   tx = torch.from_numpy(tx)
@@ -375,7 +383,6 @@ def main(argv: List[str]):
                                         lr=0.0001,
                                         momentum=0.1,
                                         weight_decay=0.01)
-
 
   inputs = get_inputs()
   common_app_driver(args, model, inputs, optim, name='inverse', app_dir=utils.get_file_dir(__file__)) 
