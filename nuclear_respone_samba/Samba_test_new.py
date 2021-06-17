@@ -29,7 +29,118 @@ def get_inputs() -> Tuple[samba.SambaTensor, samba.SambaTensor]:
     label = samba.randn(100, 2000, name='y_data', batch_dim=0)
     return image, label
   
+############################################################
+# Integrator
+# First define a function that finds the nearest neighbors
+def x_near(x, x_v):
+    x_d = np.abs(x_v - x)
+    x_index = np.argsort(x_d)
+    return x_index
 
+# Construct the interpolating polynomials up to second order
+def polint_quadratic(x, x_v):
+    n = x.shape[0]
+    n_v = x_v.shape[0]
+    poly = np.zeros((n,3))
+    x_index = np.zeros((n, n_v), dtype=int)
+    for i in range (n):
+        x_index[i] = x_near(x[i], x_v)
+        x_i = x_v[x_index[i, 0:3]]   
+        poly[i,0] = (x[i]-x_i[1])*(x[i]-x_i[2])/(x_i[0]-x_i[1])/(x_i[0]-x_i[2])
+        poly[i,1] = (x[i]-x_i[0])*(x[i]-x_i[2])/(x_i[1]-x_i[0])/(x_i[1]-x_i[2])
+        poly[i,2] = (x[i]-x_i[0])*(x[i]-x_i[1])/(x_i[2]-x_i[0])/(x_i[2]-x_i[1])
+    return poly, x_index
+
+# Actual interpolation function
+def interp_quadratic(x, x_v, y_v, poly, x_index):
+    y = np.zeros(x.shape[0])
+    for i in range (x.shape[0]):
+        y[i] = np.sum( poly[i, 0:3] * y_v[x_index[i, 0:3]])
+    return y
+
+def interpolate_Alessandro(omega_fine, omega_, R_):
+    omega_fine = omega_fine.reshape([-1])
+    R_temp = np.zeros([R_.shape[0],omega_fine.shape[0]])
+    poly, x_index = polint_quadratic(omega_fine.reshape([-1]), omega_.reshape([-1]))
+    print("I am starting the main interpolation loop")
+    for i in range(R_.shape[0]):
+        R_temp[i,:] = interp_quadratic(omega_fine.reshape([-1]),\
+         omega_.reshape([-1]), R_[i,:].reshape([-1]), poly, x_index)
+    return R_temp, poly, x_index
+
+def interpolate_integrate_self(tau_, omega_, R_, sigma_E = 0.0001, nw = 2000, wmax =2000):
+    n_tau = tau_.shape[0]
+    n_points = R_.shape[0]
+    # Get the fine grid
+    dw = wmax / nw
+    omega_fine  = np.zeros(nw)
+    for i in range (nw):
+        omega_fine[i] = (i + 0.5) * dw
+    # Get the integration coefficients.
+    omega_fine = omega_fine.reshape([-1,1])
+    index = np.argsort(omega_)
+    nw = omega_fine.shape[0]
+    Kern = np.zeros([n_tau, nw])
+    Kern_R = np.zeros([1, nw])
+    for i in range(n_tau):
+        for j in range((nw-1)):
+            Kern_R[0,j] = (omega_fine[j+1,0]-omega_fine[j,0]) 
+            Kern[i,j]  =  np.exp(-1*omega_fine[j,0]*tau_[i,0])*Kern_R[0,j]   
+    E_      = np.zeros([n_points,n_tau])
+    R_temp, poly, x_index  =  interpolate_Alessandro(omega_fine, omega_, R_)
+    E_      = np.transpose(np.matmul(Kern, np.transpose(R_temp) ) )
+    R_temp[R_temp<1e-08] = 1e-08
+    return E_, R_temp, omega_fine, Kern, Kern_R, poly, x_index
+
+def integrate(tau_, omega_, omega_fine, R_, sigma_E = 0.0001, nw = 2000, wmax =2000):
+    n_tau = tau_.shape[0]
+    n_points = R_.shape[0]
+    dw = wmax / nw
+    omega_fine = omega_fine.reshape([-1,1])
+    index = np.argsort(omega_)
+    nw = omega_fine.shape[0]
+    Kern = np.zeros([n_tau, nw])
+    Kern_R = np.zeros([1, nw])
+    for i in range(n_tau):
+        for j in range((nw-1)):
+            Kern_R[0,j] = (omega_fine[j+1,0]-omega_fine[j,0])  
+            Kern[i,j]  =  np.exp(-1*omega_fine[j,0]*tau_[i,0])*dw   
+    E_      = np.zeros([n_points,n_tau])
+    # R_[R_<1e-08] = 1e-08
+    E_      = np.transpose(np.matmul(Kern, np.transpose(R_) ) )
+    return E_, R_, Kern, Kern_R
+
+#####################################################################
+# The Metric calculation
+def chi2_vec(y, yhat, factor):
+    return np.mean(((y-yhat)**2/factor**2), axis = 1)
+
+
+def get_r2_numpy_manual_vec(y_true, y_pred):
+    ybar = np.mean(y_true, axis = 1).reshape([-1,1])
+    SS_res = np.sum(np.square(y_pred - y_true), axis = 1) 
+    SS_tot = np.sum(np.square(y_true - ybar), axis = 1) 
+    r2 = (1-(SS_res/(SS_tot+0.00000001)))
+    return r2
+
+
+def Entropy(x, xhat, int_coeff = 1):
+    import numpy as np
+    return np.sum(xhat-x-xhat*np.log( np.divide(xhat,x) ) , axis = 1)
+
+
+def best_five(x, n): 
+    import numpy as np 
+    return np.argsort(x)[:n]
+
+
+def worst_five(x, n): 
+    import numpy as np
+    ranked = np.argsort(x)
+    return ranked[::-1][:n]
+
+
+###################################################################
 # Data importing functions
 def return_dict(i):
     import pickle
@@ -291,7 +402,7 @@ def main(argv: List[str]):
         print("I went with the two peak data")
         R = x['Two_Peak_R_interp']
         E = x['Two_Peak_E']
-    elif params['peak'] == 'both':
+    elif params['peak'] == 'both
         R = np.concatenate([x['One_Peak_R_interp'],
                             x['Two_Peak_R_interp']
                             ], axis=0 )
