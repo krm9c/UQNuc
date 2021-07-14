@@ -9,6 +9,9 @@ import os
 import shutil
 
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
 class Params():
     """Class that loads hyperparameters from a json file.
     Example:
@@ -128,7 +131,7 @@ parser.add_argument(
 if __name__ == '__main__':
     # Load the parameters from json file
     args = parser.parse_args()
-    json_path = os.path.join('../Uncert/', args.json_file)
+    json_path = os.path.join('/home/kraghavan/Projects/Nuclear/UQNuc/orig_torch_code', args.json_file)
     assert os.path.isfile(
         json_path), "No json configuration file found at {}".format(json_path)
     params = Params(json_path).dict
@@ -264,54 +267,58 @@ if __name__ == '__main__':
     layer_widths = [152, 200]
     layer_centres = [2000]
     basis_func = gaussian
-    samples = 64
+    samples = 256
     rbfnet = Network(layer_widths, layer_centres, basis_func, Kern_R, Kern)
-
+    rbfnet = rbfnet.to(device)
 
     print("The flag value before going to the input is", Config['input_flag'])
     if Config['input_flag'] ==1:
         print("I am going to load the model")
         rbfnet.load_state_dict(torch.load(Config['output_model']+'mod') )
 
-    E_hat_up, R_hat_up, E_hat_down, R_hat_down, E_t, R_t, LR, LE = \
-        rbfnet.fit(E, R, E_test, R_test, Config['n_iterations'],
+    # E_hat_up, R_hat_up, E_hat_down, R_hat_down, E_t, R_t, LR, LE = \
+    #     rbfnet.fit(E, R, E_test, R_test, Config['n_iterations'],
+    #                Config['batch_size'], 0.001, tau, omega_fine, Config)
+
+
+    LR, LE =  rbfnet.fit(E, R, E_test, R_test, Config['n_iterations'],
                    Config['batch_size'], 0.001, tau, omega_fine, Config)
 
-
+    # print(profiler.key_averages().table(sort_by="self_cuda_time_total", row_limit=-1))
 
     if Config['output_flag'] ==1 :
         print("I am going to save the model")
         torch.save(rbfnet.state_dict(), Config['output_model']+'mod')
 
-    def chi2_vec(y, yhat, factor):
-        return np.mean(((y-yhat)**2/factor**2), axis=1)
+    # def chi2_vec(y, yhat, factor):
+    #     return np.mean(((y-yhat)**2/factor**2), axis=1)
 
-    chi_2_values = chi2_vec(E_t, E_hat_up, 0.0001)
+    # chi_2_values = chi2_vec(E_t, E_hat_up, 0.0001)
 
-    print("no. of responses with chi2 E > 10:",
-          len(chi_2_values[chi_2_values > 10]))
-    # chi_2_values = chi_2_values[chi_2_values<100]
-    print("Min", np.min(chi_2_values))
-    print("Median", np.median(chi_2_values))
-    print("Max", np.max(chi_2_values))
-    print("Mean", chi_2_values.mean())
-    print("std", chi_2_values.std())
-
-
-    # Save the final loss files.
-    LR = np.array(LR).reshape([-1, 1])
-    LE = np.array(LE).reshape([-1, 1])
-
-    fig, a = plt.subplots(1, 1, sharex=False,
-                          dpi=600, gridspec_kw={'wspace': 0.7, 'hspace': 0.7})
+    # print("no. of responses with chi2 E > 10:",
+    #       len(chi_2_values[chi_2_values > 10]))
+    # # chi_2_values = chi_2_values[chi_2_values<100]
+    # print("Min", np.min(chi_2_values))
+    # print("Median", np.median(chi_2_values))
+    # print("Max", np.max(chi_2_values))
+    # print("Mean", chi_2_values.mean())
+    # print("std", chi_2_values.std())
 
 
-    a.plot(LR, label='R Loss', linewidth=1)
-    a.plot(LE, label='E Loss', linewidth=1)
-    a.set_xlabel("iterations")
-    a.set_ylabel('Loss value')
-    a.set_yscale('log')
-    a.legend()
-    plt.savefig(Config['output_model']+"losses.png", dpi=600)
-    np.savetxt(Config['output_model']+str("losses")+".csv",
-               np.concatenate([LE, LR], axis=1), delimiter=',')
+    # # Save the final loss files.
+    # LR = np.array(LR).reshape([-1, 1])
+    # LE = np.array(LE).reshape([-1, 1])
+
+    # fig, a = plt.subplots(1, 1, sharex=False,
+    #                       dpi=600, gridspec_kw={'wspace': 0.7, 'hspace': 0.7})
+
+
+    # a.plot(LR, label='R Loss', linewidth=1)
+    # a.plot(LE, label='E Loss', linewidth=1)
+    # a.set_xlabel("iterations")
+    # a.set_ylabel('Loss value')
+    # a.set_yscale('log')
+    # a.legend()
+    # plt.savefig(Config['output_model']+"losses.png", dpi=600)
+    # np.savetxt(Config['output_model']+str("losses")+".csv",
+    #            np.concatenate([LE, LR], axis=1), delimiter=',')
