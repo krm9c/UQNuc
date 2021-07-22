@@ -9,17 +9,16 @@ import numpy as np
 from typing import List, Tuple
 import time
 
-
 # Sambaflow routines
 import sambaflow
 import sambaflow.samba as samba
 import sambaflow.samba.utils as utils
-
 from sambaflow.samba.utils.argparser import parse_app_args
 from sambaflow.samba.utils.common import common_app_driver
 from sambaflow.samba.utils.dataset.mnist import dataset_transform
 from sambaflow.samba.utils.trainer.samba import train as samba_train
 from sambaflow.samba.utils.trainer.torch import train as torch_train
+
 
 
 ## Placeholder for samba tensors
@@ -28,7 +27,8 @@ def get_inputs() -> Tuple[samba.SambaTensor, samba.SambaTensor]:
     image = samba.randn(100, 151, name='x_data', batch_dim=0)
     label = samba.randn(100, 2000, name='y_data', batch_dim=0)
     return image, label
-  
+
+
 ############################################################
 # Integrator
 # First define a function that finds the nearest neighbors
@@ -37,6 +37,9 @@ def x_near(x, x_v):
     x_index = np.argsort(x_d)
     return x_index
 
+
+############################################################
+# Integrator
 # Construct the interpolating polynomials up to second order
 def polint_quadratic(x, x_v):
     n = x.shape[0]
@@ -51,6 +54,10 @@ def polint_quadratic(x, x_v):
         poly[i,2] = (x[i]-x_i[0])*(x[i]-x_i[1])/(x_i[2]-x_i[0])/(x_i[2]-x_i[1])
     return poly, x_index
 
+
+
+############################################################
+# Integrator
 # Actual interpolation function
 def interp_quadratic(x, x_v, y_v, poly, x_index):
     y = np.zeros(x.shape[0])
@@ -58,6 +65,7 @@ def interp_quadratic(x, x_v, y_v, poly, x_index):
         y[i] = np.sum( poly[i, 0:3] * y_v[x_index[i, 0:3]])
     return y
 
+############################################################
 def interpolate_Alessandro(omega_fine, omega_, R_):
     omega_fine = omega_fine.reshape([-1])
     R_temp = np.zeros([R_.shape[0],omega_fine.shape[0]])
@@ -68,6 +76,10 @@ def interpolate_Alessandro(omega_fine, omega_, R_):
          omega_.reshape([-1]), R_[i,:].reshape([-1]), poly, x_index)
     return R_temp, poly, x_index
 
+
+
+
+############################################################
 def interpolate_integrate_self(tau_, omega_, R_, sigma_E = 0.0001, nw = 2000, wmax =2000):
     n_tau = tau_.shape[0]
     n_points = R_.shape[0]
@@ -91,6 +103,9 @@ def interpolate_integrate_self(tau_, omega_, R_, sigma_E = 0.0001, nw = 2000, wm
     E_      = np.transpose(np.matmul(Kern, np.transpose(R_temp) ) )
     R_temp[R_temp<1e-08] = 1e-08
     return E_, R_temp, omega_fine, Kern, Kern_R, poly, x_index
+
+
+
 
 def integrate(tau_, omega_, omega_fine, R_, sigma_E = 0.0001, nw = 2000, wmax =2000):
     n_tau = tau_.shape[0]
@@ -177,40 +192,37 @@ class RBF(nn.Module):
             distances.
     """
 
-    def __init__(self, in_features, out_features):
+    def __init__(self, in_features: int, out_features: int):
         super(RBF, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.centres = nn.Parameter(torch.Tensor(out_features, in_features))
         self.sigmas = nn.Parameter(torch.Tensor(out_features))
-        self.reset_parameters()
-
-    def reset_parameters(self):
+        # self.reset_parameters()
+        # def reset_parameters(self):
         nn.init.normal_(self.centres, 0, 0.01)
         nn.init.constant_(self.sigmas, 2)
 
     
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         size = (inputs.size(0), self.out_features, self.in_features)
-        
         x = inputs.unsqueeze(1).expand(size)
         c = self.centres.unsqueeze(0).expand(size)
         
-
-
         ## Source of Error #1
         ## Original line of code (throws an error on pow function)
         # Would be a much more efficient inline operation if pow function works
-        # distances= (x-c).pow(2).sum(-1).pow(0.5) * self.sigmas.unsqueeze(0)
+        distances=(x-c).pow(2).sum(-1).pow(0.5) * self.sigmas.unsqueeze(0)
         
         ## My workaround 
-        t = torch.add(x, -1*c)
-        t = torch.mul(t, t)
-        t = t.sum(-1)
-        t = torch.sqrt(t)
-        distances = t*self.sigmas.unsqueeze(0)
+        # t = torch.add(x, -1*c)
+        # t = torch.mul(t, t)
+        # t = t.sum(-1)
+        # t = torch.sqrt(t)
+        # distances = t*self.sigmas.unsqueeze(0)
+        return torch.exp(-1*torch.mul(distances, distances))
         
-        return self.gaussian(distances)
+    # return self.gaussian(distances)
 
     def gaussian(self,alpha: torch.Tensor) -> torch.Tensor:
         phi = torch.exp(-1*torch.mul(alpha, alpha))
@@ -242,9 +254,8 @@ class Network(nn.Module):
         i=0
         #################################
         # This the nested class object. 
-        # The instantiation should work but when we call the instantiation in forward, it will not work.
-        # self.rbf1=RBF(layer_widths[i], layer_widths[i+1])
-        
+        # The instantiation should work but when we call the instantiation in forward, it will throw errors.
+        self.rbf1=RBF(layer_widths[i], layer_widths[i+1])    
         self.l1=nn.Linear(layer_widths[i+1], layer_centres[i])
         self.l2=nn.Linear(layer_centres[i], layer_centres[i]) 
         self.sig=torch.sigmoid
@@ -257,13 +268,13 @@ class Network(nn.Module):
                 
     ##########################################
     def forward(self,inputs: torch.Tensor, targets: torch.Tensor) -> Tuple[torch.Tensor]:    
-        
+        out = inputs 
         ##########################################
         ## Error Source no. 2
         # uncommenting the following line would throw an error
-        # out = self.rbf1(inputs)
+        out = self.rbf1(out)
         # Without the above the line things would work
-        out = self.sig(self.l1(inputs))
+        out = self.sig(self.l1(out))
         Rhat = self.e(self.l2(out))
 
         ##########################################
@@ -322,6 +333,7 @@ def add_args(parser: argparse.ArgumentParser):
     parser.add_argument('--momentum', type=float, default=0.0)
     parser.add_argument('--weight-decay', type=float, default=0.01)
     parser.add_argument('--acc-test', action='store_true', help='Option for accuracy guard test in CH regression.')
+
 
 
 ##################################################
@@ -485,7 +497,7 @@ def main(argv: List[str]):
   print(tx.shape, ty.shape)
   # To add more layers, change the layer_widths and layer_centres lists
   layer_widths  = [151, 151]
-  layer_centres = [2000]
+  layer_centres = [2000, 2000]
   samples = 100
   model = Network(layer_widths, layer_centres)
   samba.from_torch_(model)
@@ -512,6 +524,9 @@ def main(argv: List[str]):
   
 
 if __name__ == '__main__':
+    print (sambaflow.__version__)
+    
+
     start_time = time.time()
     print(time.time())
     main(sys.argv[1:])
