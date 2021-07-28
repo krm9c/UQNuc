@@ -1,0 +1,308 @@
+# Original torch libraries
+import argparse
+import os
+import torch
+import torch.nn as nn
+from torch.utils.data import Dataset, DataLoader
+import sys
+import numpy as np
+from typing import List, Tuple
+import time
+
+# Sambaflow routines
+import sambaflow
+import sambaflow.samba as samba
+import sambaflow.samba.utils as utils
+from sambaflow.samba.utils.argparser import parse_app_args
+from sambaflow.samba.utils.common import common_app_driver
+from sambaflow.samba.utils.dataset.mnist import dataset_transform
+from sambaflow.samba.utils.trainer.samba import train as samba_train
+from sambaflow.samba.utils.trainer.torch import train as torch_train
+
+
+
+###################################################################
+## Placeholder for samba tensors
+def get_inputs() -> Tuple[samba.SambaTensor, samba.SambaTensor]:
+  	#placeholde
+    image = samba.randn(100, 151, 151, name='x_data', batch_dim=0)
+    label = samba.randn(100, 2000, name='y_data', batch_dim=0)
+    return image, label
+
+
+###################################################################
+# Data importing functions
+def return_dict(i):
+    import pickle
+    with (open(i, "rb")) as openfile:
+        while True:
+            try:
+                x = pickle.load(openfile)
+            except EOFError:
+                break
+    return x
+
+
+##################################################
+# Torch dataset and dataloader
+class MyDataset(Dataset):
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+    
+    def __len__(self):
+        return self.x.size(0)
+    
+    def __getitem__(self, idx):
+        x = self.x[idx]
+        y = self.y[idx]
+        return (x, y)
+
+
+###################################################################
+## The main network
+class Network(nn.Module):
+    ##################################################    
+    def __init__(self, layer_widths, layer_centres, kern_R=0, kern=0):
+        super(Network, self).__init__()
+
+        # The definition of the rbf layer
+        self.in_features = 151
+        self.out_features = 151
+        self.centres = nn.Parameter(torch.Tensor(100, self.out_features, self.in_features), requires_grad=True)
+        self.sigmas = nn.Parameter(torch.Tensor(self.out_features), requires_grad=True)
+        nn.init.normal_(self.centres, 0, 0.01)
+        nn.init.constant_(self.sigmas, 2)
+
+        #################################
+        # This the nested class object. I have moved all of this to forward 
+        # The instantiation should work but when we call the instantiation in forward, it will throw errors.
+        self.l1=nn.Linear(layer_widths[1], layer_centres[0])
+        self.l2=nn.Linear(layer_centres[0], layer_centres[0]) 
+        self.sig=torch.sigmoid
+        self.e=torch.exp
+        self.criterion=nn.MSELoss() 
+
+
+     
+        # Functions to determine integration
+        # self.kern_R = torch.from_numpy(kern_R)
+        # self.kern = torch.from_numpy(kern).float()
+           
+    ##########################################
+    def forward(self,inputs: torch.Tensor, targets: torch.Tensor) -> Tuple[torch.Tensor]:    
+        # out = inputs
+
+        print(inputs.shape)
+        ##########################################
+        ## Error Source no. 2
+        # uncommenting the following line would throw an error
+        # size = (inputs.size(0), self.out_features, self.in_features)
+        # x = samba.from_torch(torch.repeat_interleave(samba.to_torch(inputs).unsqueeze(1), self.out_features, dim=1))
+        '''
+        n_tile =151
+        dim=1
+        a=inputs.unsqueeze(1)
+        init_dim = a.size(dim)
+        repeat_idx = [1] * a.dim()
+        repeat_idx[dim] = n_tile
+        a = a.repeat(*(repeat_idx))
+        order_index = torch.LongTensor(np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)]))
+        x = torch.index_select(a, dim, order_index)
+        
+        n_tile=100
+        dim=0
+        a=self.centers.unsqueeze(0)
+        init_dim = a.size(dim)
+        repeat_idx = [1] * a.dim()
+        repeat_idx[dim] = n_tile
+        a = a.repeat(*(repeat_idx))
+        order_index = torch.LongTensor(np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)]))
+        x = torch.index_select(a, dim, order_index)
+       '''
+        c =self.centres 
+        x=inputs
+        # print("the shape of data and center", inputs.shape, c.shape) 
+        ## My workaround 
+        t = torch.add(x, -1*c)
+        t = torch.mul(t, 1*t)
+        t = torch.sum(t, dim=1)
+        t = torch.sqrt(t)
+        distances = t*self.sigmas.unsqueeze(0)
+        out= self.e(-1*torch.mul(distances, 1*distances))
+        
+        # Without the above the line things would work
+        out = self.sig(self.l1(out))
+        Rhat = self.e(self.l2(out))
+
+        ##########################################
+        # We have convert the follwing pytorch code to sambai
+        # Error Source no. 3.
+        ##########################################
+        # print(out.shape, self.kern.shape)
+        # Ehat = torch.matmul(self.kern, out.transpose(0, 1)).transpose(0, 1)
+        # correction_term = Ehat[:, 0].view(-1, 1).repeat(1, 2000)
+        ##########################################
+        # print(correction_term.shape, Ehat.shape, out.shape)
+        # Rhat = torch.div(out, correction_term)
+        # Rhat = out
+        # print(out.shape, self.kern.shape)
+        ##########################################
+        # multout = torch.matmul(self.kern, Rhat.transpose(0, 1))
+        # print(multout.shape)
+        # Ehat = multout.transpose(0, 1) 
+
+        # The Entropy
+        # non_integrated_entropy = (Rhat-R-torch.multiply(Rhat, torch.log(torch.div(Rhat, R))))
+        # loss_R = -1*torch.mean(torch.multiply(self.kern_R,non_integrated_entropy))
+
+        # The uq loss
+        # tt = inputs[:,151]
+        # diff = Rhat - targets
+        # mask = (diff.ge(0).float() - tt.repeat(2000).view(-1, 2000)).detach()
+        # loss_uq_R = (mask * diff).mean()
+
+        # diff = Ehat - inputs[:,0:151]
+        # mask = (diff.ge(0).float() - tt.repeat(151).view(-1, 151)).detach()
+        # loss_uq_E = (mask * diff).mean()
+
+
+        # The E's loss
+        # loss_E = torch.mean(torch.square(Ehat - E[:, :151])*(1/(0.0001*0.0001)))
+
+        # Total Loss
+        # LOSS = torch.mean(factor_E*loss_E + factor_R*loss_R  + factor_R_uq*loss_uq_R)
+        
+
+        # The loss current, we want the previous one though
+        LOSS = self.criterion(Rhat,targets)
+        return LOSS, Rhat
+    
+
+
+
+##################################################
+def add_args(parser: argparse.ArgumentParser):
+    parser.add_argument('-c', '--num-classes', type=int, default=151)
+    parser.add_argument('-e', '--num-epochs', type=int, default=100)
+    parser.add_argument('-k', '--num-features', type=int, default=784)
+    parser.add_argument('--hidden-size', type=int, default=128)
+    parser.add_argument('--lr', type=float, default=0.01)
+    parser.add_argument('--momentum', type=float, default=0.0)
+    parser.add_argument('--weight-decay', type=float, default=0.01)
+    parser.add_argument('--acc-test', action='store_true', help='Option for accuracy guard test in CH regression.')
+
+
+
+##################################################
+def add_run_args(parser: argparse.ArgumentParser):
+    parser.add_argument('--log-path', type=str, default='checkpoints')
+    parser.add_argument('--data-path', type=str, default='./data')
+    parser.add_argument('--dump-interval', type=int, default=1)
+    parser.add_argument('--gen-reference', action='store_true', help="Generate PyTorch reference data")
+    parser.add_argument('-e', '--num-epochs', type=int, default=1)
+    parser.add_argument('-n', '--num-iterations', type=int, default=100, help='Number of iterations to run the pef for')
+    parser.add_argument('--num-workers', type=int, default=0)
+    parser.add_argument('--measure-train-performance', action='store_true')
+
+
+##################################################
+def add_run_args(parser: argparse.ArgumentParser):
+    parser.add_argument('--data-folder',
+                        type=str,
+                        default='mnist_data',
+                        help="The folder to download the MNIST dataset to.")
+
+##################################################
+# Main train loop 
+def train(model, optimizer: samba.optim.SGD, x: torch.Tensor, y:  torch.Tensor, epochs:int, batch_size:int, lr:float) -> None:
+    trainset = MyDataset(x, y)
+
+    print(x.shape, y.shape, batch_size)
+    trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
+    epoch = 0
+    while epoch < epochs:
+        epoch += 1
+        for x_batch, y_batch in trainloader:
+           y_batch = y_batch.float()
+           x_batch=x_batch.float()
+           x = torch.repeat_interleave(x_batch.unsqueeze(1), 151, dim=1)
+               
+           ##########################################
+           # The following code is used when we start with the UQ part
+           ##########################################
+           # tt = torch.rand(x_batch.shape[0], 1)
+           # print(x_batch.shape, tau.shape)
+           # x_batch = torch.cat((x_batch, tt), 1)
+           # print(x_batch.shape, tau.shape)           
+           
+           # print(x_batch.shape, y_batch.shape)
+           s_x = samba.from_torch(x, name ='x_data', batch_dim = 0).float() #rcw
+           s_y = samba.from_torch(y_batch, name ='y_data', batch_dim = 0).float() #rcw
+           # print(s_x.shape, s_y.shape)
+           loss, outputs = samba.session.run(input_tensors=[s_x, s_y],output_tensors= model.output_tensors)
+           sys.stdout.write('\rEpoch: %d, Loss:%f' %(epoch, samba.to_torch(loss).mean()))
+
+
+
+
+#########################################################################################
+
+# *** The following is for the full dataset
+
+def main(argv: List[str]):
+    args = parse_app_args(argv=argv, common_parser_fn=add_args, run_parser_fn=add_run_args)
+    # The following code extracts data when the full dataset is used.
+
+    x = return_dict('../../inverse_data_interpolated_numpy.p')
+    print(x.keys())
+    R = x['One_Peak_R_interp']
+    E = x['One_Peak_E']
+  
+    index = np.random.randint(0, R.shape[0], 1000)
+    # The shape of the training data
+    print("Training data", R.shape, E.shape)
+    R = R[index]
+    E = E[index]
+ 
+
+    # Here I will put the code for generating the integration coefficients.
+  
+    tx = torch.from_numpy(E)
+    ty = torch.from_numpy(R)
+    print(tx.shape, ty.shape)
+    # To add more layers, change the layer_widths and layer_centres lists
+    layer_widths  = [151, 151]
+    layer_centres = [2000, 2000]
+    model = Network(layer_widths, layer_centres)
+    samba.from_torch_(model)
+    model.float()
+    optim = sambaflow.samba.optim.SGD(model.parameters(),
+                                        lr=0.0001,
+                                        momentum=0.1,
+                                        weight_decay=0.01)
+
+    inputs = get_inputs()
+    common_app_driver(args, model, inputs, optim, name='inverse', app_dir=utils.get_file_dir(__file__)) 
+    if args.command == "test":
+          utils.trace_graph(model, inputs, optim, pef='out/inverse/inverse.pef')
+        # utils.trace_graph(model, inputs, optim, config_dict=vars(args))
+          outputs = model.output_tensors
+          #run_test( model, inputs, outputs)
+    elif args.command == "run":
+          print (args)
+          #rcw utils.trace_graph(model, inputs, optim, config_dict=vars(args))
+          utils.trace_graph(model, inputs, optim, pef='out/inverse/inverse.pef')
+          train(model, optim, tx, ty, 100, 100, 0.0001)    
+  
+  
+  
+
+if __name__ == '__main__':
+    print (sambaflow.__version__)
+    
+
+    start_time = time.time()
+    print(time.time())
+    main(sys.argv[1:])
+    print("/n The time taken for training is--", time.time()-start_time)
