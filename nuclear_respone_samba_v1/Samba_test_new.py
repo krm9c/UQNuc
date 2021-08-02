@@ -254,20 +254,21 @@ def main(argv: List[str]):
     args = parse_app_args(argv=argv, common_parser_fn=add_args, run_parser_fn=add_run_args)
     # The following code extracts data when the full dataset is used.
 
-    x = return_dict('../../inverse_data_interpolated_numpy.p')
-    print(x.keys())
-    R = x['One_Peak_R_interp']
-    E = x['One_Peak_E']
+    # x = return_dict('../../inverse_data_interpolated_numpy.p')
+    # print(x.keys())
+    # R = x['One_Peak_R_interp']
+    # E = x['One_Peak_E']
   
-    index = np.random.randint(0, R.shape[0], 1000)
+    # index = np.random.randint(0, R.shape[0], 1000)
     # The shape of the training data
-    print("Training data", R.shape, E.shape)
-    R = R[index]
-    E = E[index]
+    # print("Training data", R.shape, E.shape)
+    # R = R[index]
+    #E = E[index]
  
 
     # Here I will put the code for generating the integration coefficients.
-  
+    E = np.loadtxt("E.csv", delimiter=',')
+    R = np.loadtxt("R.csv", delimiter=',')
     tx = torch.from_numpy(E)
     ty = torch.from_numpy(R)
     print(tx.shape, ty.shape)
