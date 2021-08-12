@@ -71,6 +71,8 @@ class Network(nn.Module):
         self.out_features = 151
         self.centres = nn.Parameter(torch.Tensor(100, self.out_features, self.in_features), requires_grad=True)
         self.sigmas = nn.Parameter(torch.Tensor(self.out_features), requires_grad=True)
+        self.kern=kern
+        self.kern_R=kern
         nn.init.normal_(self.centres, 0, 0.01)
         nn.init.constant_(self.sigmas, 2)
 
@@ -119,6 +121,7 @@ class Network(nn.Module):
         a = a.repeat(*(repeat_idx))
         order_index = torch.LongTensor(np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)]))
         x = torch.index_select(a, dim, order_index)
+
        '''
         c =self.centres 
         x=inputs
@@ -140,46 +143,30 @@ class Network(nn.Module):
         # Error Source no. 3.
         ##########################################
         # print(out.shape, self.kern.shape)
-        # Ehat = torch.matmul(self.kern, out.transpose(0, 1)).transpose(0, 1)
-        # correction_term = Ehat[:, 0].view(-1, 1).repeat(1, 2000)
+        Ehat = torch.matmul(self.kern, out.transpose(0, 1)).transpose(0, 1)
+        correction_term = Ehat[:, 0].view(-1, 1).repeat(1, 2000)
         ##########################################
         # print(correction_term.shape, Ehat.shape, out.shape)
-        # Rhat = torch.div(out, correction_term)
-        # Rhat = out
-        # print(out.shape, self.kern.shape)
+        Rhat = torch.div(out, correction_term)
+        Rhat = out
+        print(out.shape, self.kern.shape)
         ##########################################
-        # multout = torch.matmul(self.kern, Rhat.transpose(0, 1))
-        # print(multout.shape)
-        # Ehat = multout.transpose(0, 1) 
-
+        multout = torch.matmul(self.kern, Rhat.transpose(0, 1))
+        print(multout.shape)
+        Ehat = multout.transpose(0, 1) 
         # The Entropy
-        # non_integrated_entropy = (Rhat-R-torch.multiply(Rhat, torch.log(torch.div(Rhat, R))))
-        # loss_R = -1*torch.mean(torch.multiply(self.kern_R,non_integrated_entropy))
-
-        # The uq loss
-        # tt = inputs[:,151]
-        # diff = Rhat - targets
-        # mask = (diff.ge(0).float() - tt.repeat(2000).view(-1, 2000)).detach()
-        # loss_uq_R = (mask * diff).mean()
-
-        # diff = Ehat - inputs[:,0:151]
-        # mask = (diff.ge(0).float() - tt.repeat(151).view(-1, 151)).detach()
-        # loss_uq_E = (mask * diff).mean()
-
-
+        non_integrated_entropy = (Rhat-targets-torch.multiply(Rhat, torch.log(torch.div(Rhat, R))))
+        loss_R = -1*torch.mean(torch.multiply(self.kern_R,non_integrated_entropy))
         # The E's loss
-        # loss_E = torch.mean(torch.square(Ehat - E[:, :151])*(1/(0.0001*0.0001)))
+        loss_E = torch.mean(torch.square(Ehat - inputs)*(1/(0.0001*0.0001)))
 
         # Total Loss
-        # LOSS = torch.mean(factor_E*loss_E + factor_R*loss_R  + factor_R_uq*loss_uq_R)
+        LOSS = torch.mean(0.00001*loss_E + 1e06*loss_R)
         
-
         # The loss current, we want the previous one though
-        LOSS = self.criterion(Rhat,targets)
-        return LOSS, Rhat
+        # LOSS = self.criterion(Rhat,targets)
+        return LOSS, Rhat, Ehat
     
-
-
 
 ##################################################
 def add_args(parser: argparse.ArgumentParser):
