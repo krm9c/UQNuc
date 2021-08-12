@@ -25,9 +25,11 @@ from sambaflow.samba.utils.trainer.torch import train as torch_train
 ## Placeholder for samba tensors
 def get_inputs() -> Tuple[samba.SambaTensor, samba.SambaTensor]:
   	#placeholde
-    image = samba.randn(100, 151, 151, name='x_data', batch_dim=0)
-    label = samba.randn(100, 2000, name='y_data', batch_dim=0)
-    return image, label
+    x = samba.randn(100, 151, 151, name='x_data', batch_dim=0)
+    R  = samba.randn(100, 2000, name='y_data', batch_dim=0)  
+    E = samba.randn(100, 151, name='E', batch_dim=0)
+    tt = samba.randn(100, name='tt', batch_dim=0)
+    return x, R, E, tt
 
 
 ###################################################################
@@ -71,8 +73,8 @@ class Network(nn.Module):
         self.out_features = 151
         self.centres = nn.Parameter(torch.Tensor(100, self.out_features, self.in_features), requires_grad=True)
         self.sigmas = nn.Parameter(torch.Tensor(self.out_features), requires_grad=True)
-        self.kern=kern
-        self.kern_R=kern
+        self.kern=torch.from_numpy(kern).float()
+        self.kern_R=torch.from_numpy(kern_R).float()
         nn.init.normal_(self.centres, 0, 0.01)
         nn.init.constant_(self.sigmas, 2)
 
@@ -92,42 +94,11 @@ class Network(nn.Module):
         # self.kern = torch.from_numpy(kern).float()
            
     ##########################################
-    def forward(self,inputs: torch.Tensor, targets: torch.Tensor) -> Tuple[torch.Tensor]:    
-        # out = inputs
-
-        print(inputs.shape)
-        ##########################################
-        ## Error Source no. 2
-        # uncommenting the following line would throw an error
-        # size = (inputs.size(0), self.out_features, self.in_features)
-        # x = samba.from_torch(torch.repeat_interleave(samba.to_torch(inputs).unsqueeze(1), self.out_features, dim=1))
-        '''
-        n_tile =151
-        dim=1
-        a=inputs.unsqueeze(1)
-        init_dim = a.size(dim)
-        repeat_idx = [1] * a.dim()
-        repeat_idx[dim] = n_tile
-        a = a.repeat(*(repeat_idx))
-        order_index = torch.LongTensor(np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)]))
-        x = torch.index_select(a, dim, order_index)
+    def forward(self,inputs: torch.Tensor, targets: torch.Tensor, E:torch.Tensor, tt: torch.Tensor) -> Tuple[torch.Tensor]:    
         
-        n_tile=100
-        dim=0
-        a=self.centers.unsqueeze(0)
-        init_dim = a.size(dim)
-        repeat_idx = [1] * a.dim()
-        repeat_idx[dim] = n_tile
-        a = a.repeat(*(repeat_idx))
-        order_index = torch.LongTensor(np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)]))
-        x = torch.index_select(a, dim, order_index)
-
-       '''
-
-
+        # The Gaussian Layer
         c =self.centres 
         x=inputs
-        # print("the shape of data and center", inputs.shape, c.shape) 
         ## My workaround 
         t = torch.add(x, -1*c)
         t = torch.mul(t, 1*t)
@@ -135,39 +106,41 @@ class Network(nn.Module):
         t = torch.sqrt(t)
         distances = t*self.sigmas.unsqueeze(0)
         out= self.e(-1*torch.mul(distances, 1*distances))
+
         
-        # Without the above the line things would work
+        
+        # The Neural Network 
         out = self.sig(self.l1(out))
-        Rhat = self.e(self.l2(out))
-
-        ##########################################
-        # We have convert the follwing pytorch code to sambai
-        # Error Source no. 3.
-        ##########################################
-        # print(out.shape, self.kern.shape)
-        Ehat = torch.matmul(self.kern, out.transpose(0, 1)).transpose(0, 1)
+        # Go to torch to do the integration as it is easy
+        Rhat = samba.to_torch(self.e(self.l2(out)))
+        Ehat = torch.matmul(self.kern, Rhat.transpose(0, 1)).transpose(0, 1)
         correction_term = Ehat[:, 0].view(-1, 1).repeat(1, 2000)
-        ##########################################
-        # print(correction_term.shape, Ehat.shape, out.shape)
-        Rhat = torch.div(out, correction_term)
-        Rhat = out
-        print(out.shape, self.kern.shape)
-        
-        ##########################################
+        Rhat = torch.div(Rhat, correction_term)
         multout = torch.matmul(self.kern, Rhat.transpose(0, 1))
-        print(multout.shape)
-        Ehat = multout.transpose(0, 1) 
-        # The Entropy
-        non_integrated_entropy = (Rhat-targets-torch.multiply(Rhat, torch.log(torch.div(Rhat, R))))
-        loss_R = -1*torch.mean(torch.multiply(self.kern_R,non_integrated_entropy))
-        
-        # The E's loss
-        loss_E = torch.mean(torch.square(Ehat - inputs)*(1/(0.0001*0.0001)))
+        Ehat = multout.transpose(0, 1)
 
-        # Total Loss
-        LOSS = torch.mean(0.00001*loss_E + 1e06*loss_R)
+        # Go back to Sambanova
+        Ehat= samba.from_torch(Ehat)
+        Rhat=samba.from_torch(Rhat)
         
-        # The loss current, we want the previous one though
+        # Calculate the losses
+        # The Entropy 
+        non_integrated_entropy = (Rhat-targets-samba.mul(Rhat, samba.log(samba.div(Rhat, targets))))
+        loss_R = -1*torch.mean(non_integrated_entropy)
+        # The E's loss
+        E_er=(Ehat-E)
+        loss_E = torch.mean(samba.mul(E_er, 1*E_er)*(1/(0.0001*0.0001)))
+        # The uq loss
+        diff = samba.to_torch(Rhat - targets)
+        tt=samba.to_torch(tt)
+        mask = (diff.ge(0).float() - tt.repeat(2000).view(-1, 2000)).detach()
+        loss_uq_R = samba.from_torch( (mask * diff).mean()) 
+
+
+        # Add to get the total loss.
+        # Total Loss
+        LOSS = torch.mean(0.00001*loss_E + 1e06*loss_R+0.001*loss_uq_R)
+    
         # LOSS = self.criterion(Rhat,targets)
         return LOSS, Rhat, Ehat
     
@@ -208,8 +181,7 @@ def add_run_args(parser: argparse.ArgumentParser):
 # Main train loop 
 def train(model, optimizer: samba.optim.SGD, x: torch.Tensor, y:  torch.Tensor, epochs:int, batch_size:int, lr:float) -> None:
     trainset = MyDataset(x, y)
-
-    print(x.shape, y.shape, batch_size)
+    # print(x.shape, y.shape, batch_size)
     trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
     epoch = 0
     while epoch < epochs:
@@ -222,16 +194,17 @@ def train(model, optimizer: samba.optim.SGD, x: torch.Tensor, y:  torch.Tensor, 
            ##########################################
            # The following code is used when we start with the UQ part
            ##########################################
-           # tt = torch.rand(x_batch.shape[0], 1)
-           # print(x_batch.shape, tau.shape)
-           # x_batch = torch.cat((x_batch, tt), 1)
-           # print(x_batch.shape, tau.shape)           
-           
+           tt = torch.rand(x_batch.shape[0], 1)
+
+
            # print(x_batch.shape, y_batch.shape)
-           s_x = samba.from_torch(x, name ='x_data', batch_dim = 0).float() #rcw
+           s_x = samba.from_torch(x, name ='x_data', batch_dim = 0).float() #rcwi
+           E   = samba.from_torch(x_batch, name ='E', batch_dim = 0).float() #rcw
            s_y = samba.from_torch(y_batch, name ='y_data', batch_dim = 0).float() #rcw
+           s_tt  = samba.from_torch(tt, name ='tt', batch_dim = 0).float() #rcw
+           
            # print(s_x.shape, s_y.shape)
-           loss, outputs = samba.session.run(input_tensors=[s_x, s_y],output_tensors= model.output_tensors)
+           loss, outputs = samba.session.run(input_tensors=[s_x, s_y, E, s_tt],output_tensors= model.output_tensors)
            sys.stdout.write('\rEpoch: %d, Loss:%f' %(epoch, samba.to_torch(loss).mean()))
 
 
@@ -341,18 +314,21 @@ def main(argv: List[str]):
     # Here I will put the code for generating the integration coefficients.
     E = np.loadtxt("E.csv", delimiter=',')
     R = np.loadtxt("R.csv", delimiter=',')
-    omega_ = np.loadtxt("omega.csv", delimiter=',')
-    omega_fine = np.loadtxt("omega_fine.csv", delimiter=',')
-    tau = np.loadtxt("tau.csv", delimiter=',')
+    omega_ = np.loadtxt("omega.csv", delimiter=',').reshape([-1,1])
+    omega_fine = np.loadtxt("omega_fine.csv", delimiter=',').reshape([-1,1])
+    tau = np.loadtxt("tau.csv", delimiter=',').reshape([-1,1])
+    
     E, R, Kern, Kern_R = integrate(tau, omega_, omega_fine, R)
+    Kern_R[:, (Kern_R.shape[1]-1)] = 1
 
-    tx = torch.from_numpy(E)
+    tx = torch.from_numpy(E )
     ty = torch.from_numpy(R)
-    print(tx.shape, ty.shape)
+    
+    # print(tx.shape, ty.shape, Kern.shape, Kern_R.shape)
     # To add more layers, change the layer_widths and layer_centres lists
     layer_widths  = [151, 151]
     layer_centres = [2000, 2000]
-    model = Network(layer_widths, layer_centres, Kern, Kern_R)
+    model = Network(layer_widths, layer_centres, Kern_R, Kern)
     samba.from_torch_(model)
     model.float()
     optim = sambaflow.samba.optim.SGD(model.parameters(),
