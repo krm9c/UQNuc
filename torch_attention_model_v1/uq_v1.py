@@ -5,7 +5,7 @@ from torch.utils.data import Dataset, DataLoader
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
-
+import math 
 
 # Define the dataset class
 class MyDataset(Dataset):
@@ -70,10 +70,6 @@ def interpolate_integrate_self(tau_, omega_, R_, sigma_E = 0.0001, nw = 2000, wm
         omega_fine[i] = (i + 0.5) * dw
     # Get the integration coefficients.
     omega_fine = omega_fine.reshape([-1,1])
-    index = np.argsort(omega_)
-
-
-
     index = np.argsort(omega_)
     nw = omega_fine.shape[0]
     Kern = np.zeros([n_tau, nw])
@@ -166,10 +162,10 @@ class Network_inverter(nn.Module):
         # for i in range(len(self.rbf_layers)):
         mean_out_list=[]
         for i in range(self.n_peaks):
-            mean_out_list.append(torch.sigmoid(self.mean_internal_layers[i](out) )  )
+            mean_out_list.append(torch.sigmoid(self.mean_internal_layers[i](out)))
         var_out_list= []
         for i in range(self.n_peaks):
-            var_out_list.append(torch.sigmoid(self.var_internal_layers[i](out))+0.0001 )
+            var_out_list.append(torch.sigmoid(self.var_internal_layers[i](out)))
 
         alpha_out_list= []
         # for i in range(self.n_peaks):
@@ -193,7 +189,7 @@ class Network_selector(nn.Module):
 
 
 class Network(nn.Module):
-    def __init__(self, kern, input_shape=151, k=20):
+    def __init__(self, kern, input_shape=151, k=2):
         super(Network, self).__init__()
         self.inverter=Network_inverter(k=k)
         self.selector=Network_selector(k=k)
@@ -218,11 +214,11 @@ class Network(nn.Module):
             # print(mean_l[i].shape, var_l[i].shape)
             # print("mean", mean_l[i], "var", var_l[i])
             # (omega-m/sig)
-            t=torch.div( (torch.from_numpy(omega.reshape([-1]))-mean_l[i]), (var_l[i]+1e-08) )
+            t=torch.div( (torch.from_numpy(omega.reshape([-1]))-mean_l[i]), (var_l[i]) )
             # print(t.shape)
-            norm_pdf= torch.mul(torch.div(1, (var_l[i]*torch.sqrt(2*torch.tensor(math.pi)) ) ), torch.exp(torch.mul( -0.5, t.pow(2) ) ) ) +1e-8
+            norm_pdf= torch.mul(torch.div(1, (var_l[i]*torch.sqrt(2*torch.tensor(math.pi)) ) ), torch.exp(torch.mul( -0.5, t.pow(2) ) ) )
             # print("pdf", norm_pdf)
-            scaled_cdf=0.5*(1+torch.erf(torch.mul(2,t)/math.sqrt(2)))
+            scaled_cdf=0.5*(1+torch.erf(torch.mul(5,t)/math.sqrt(2)))
             # print(scaled_cdf)
             skewed_norm=torch.mul(norm_pdf,scaled_cdf)
             # print(skewed_norm)
@@ -232,7 +228,7 @@ class Network(nn.Module):
             f_t.append(skewed_norm.unsqueeze(0))
 
 
-
+        #####################################################################
         # print("the output", select.shape, f_t[0].shape, select.t().unsqueeze(2).shape)
         # print("selecto", select.shape)
         select=torch.repeat_interleave(select.t().unsqueeze(2), 2000, dim=2)
@@ -243,13 +239,13 @@ class Network(nn.Module):
         # print("before mult", select.shape, F.shape)
         Rhat = torch.exp(torch.sum(torch.mul(select, F), dim=0))
 
-
         # print(Rhat.shape)
         ##########################################
         # We have convert this code to pytorch
         # print(out.shape, self.kern.shape)
         Ehat = torch.matmul(self.kern, Rhat.transpose(0, 1)).transpose(0, 1)
         correction_term = Ehat[:, 0].view(-1, 1).repeat(1, 2000)
+
         ##########################################
         # print(correction_term.shape, Ehat.shape, out.shape)
         Rhat = torch.div(Rhat, correction_term)
@@ -263,10 +259,10 @@ class Network(nn.Module):
     def loss_func(self, Ehat, Rhat, E, R, fac):
         # The R loss
         non_integrated_entropy = (Rhat-R-torch.mul(Rhat, torch.log(torch.div(Rhat, R))))
-        loss_R = -1e06*torch.mean(non_integrated_entropy)
+        loss_R = -torch.mean(non_integrated_entropy)
         # The E's loss
         loss_E  = torch.mean(torch.mul((Ehat- E).pow(2), (1/(0.0001*0.0001))) )
-        return loss_R+fac*loss_E, loss_E, loss_R
+        return fac[0]*loss_R+fac[1]*loss_E, loss_E, loss_R
 
     ##########################################
     def fit(self, x, y, omega, tau, epochs, batch_size, lr):
@@ -276,7 +272,7 @@ class Network(nn.Module):
         LE = []
         x = torch.from_numpy(x)
         trainset = MyDataset(x, y)
-        trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
+        trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=False)
         optimiser = torch.optim.RMSprop(self.parameters(), lr=lr, weight_decay=0.001)
         print("Everything is defined now")
 
@@ -284,22 +280,28 @@ class Network(nn.Module):
         epoch = 0
         while epoch < epochs:
             epoch += 1
-           current_loss_E = 0
+            current_loss=0
+            current_loss_E = 0
             current_loss_R = 0
             batches = 0
             progress = 0
 
-         ##########################################
+            ##########################################
             if epoch < int(round(epochs*0.125)):
+                factor_R=  1e6
                 factor_E = 1e-6
             elif epoch < int(round(epochs*0.25)):
+                factor_R=  1e4
                 factor_E = 1e-4
             elif epoch < int(round(epochs*0.5)):
+                factor_R=  1e3
                 factor_E = 1e-3
             elif epoch < int(round(epochs*0.66)):
-                factor_E = 1e-2
+                factor_R= 1e2
+                factor_E= 1e-2
             else:
-                factor_E =1
+                factor_R=1
+                factor_E=1
 
             ##########################################
             for x_batch, y_batch in trainloader:
@@ -310,14 +312,15 @@ class Network(nn.Module):
                 x_batch = x_batch.float().to(device)
                 y_batch = y_batch.float().to(device)
                 xhat, yhat = self.forward(x_batch, omega, tau, epoch)
-                loss, E_L, R_L = self.loss_func(xhat, yhat, x_batch, y_batch, factor_E)
+                loss, E_L, R_L = self.loss_func(xhat, yhat, x_batch, y_batch, [factor_R, factor_E])
                 # print(loss, E_L, R_L)
-                current_loss  += (1/batches) * (loss.cpu().item() - current_loss)
+                current_loss    += (1/batches) * (loss.cpu().item() - current_loss)
                 current_loss_E  += (1/batches) * (E_L.cpu().item() - current_loss_E)
                 current_loss_R  += (1/batches) * (R_L.cpu().item() - current_loss_R)
                 loss.backward()
                 optimiser.step()
                 progress += x_batch.size(0)
+
                 sys.stdout.write('\rEpoch: %d, Progress: %d/%d, Loss: %f, Loss_R: %f, Loss_E: %f' %(epoch,\
                     progress, obs, current_loss, current_loss_R, current_loss_E))
 
@@ -327,6 +330,7 @@ class Network(nn.Module):
                 # profiler.step()
 
 
+            ##########################################
             import matplotlib.pyplot as plt
             # curve =norm_pdf[0,:].detach().numpy()
             # # print(curve.shape)
@@ -344,9 +348,9 @@ class Network(nn.Module):
             plt.close()
 
 
+
             # print(out.shape, self.kern.shape)
             ##########################################
-
             curve =xhat[0,:].detach().numpy()
             plt.plot((tau).reshape([-1]), curve, label='Ehat')
             curve =x_batch[0,:].detach().numpy()
@@ -355,6 +359,7 @@ class Network(nn.Module):
             plt.legend()
             plt.savefig("Samples_v1/Ehat"+str(epoch)+".png", dpi=300)
             plt.close()
+
 
 
 
@@ -368,8 +373,6 @@ Loaded=np.load('/gpfs/jlse-fs0/users/kraghavan/Inverse/new_Data.npz')
 E=Loaded['E'][0:10000,:]
 R=Loaded['R'][0:10000,:]
 print(E.shape, R.shape)
-
-
 
 
 E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
