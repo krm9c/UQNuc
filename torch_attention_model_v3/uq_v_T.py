@@ -375,7 +375,7 @@ class Network(nn.Module):
                     
 
                 fig.tight_layout()
-                plt.savefig("Sample_one_peak/Rhat_1_"+str(epoch)+".png", dpi=300)
+                plt.savefig("Sample_two_peak/Rhat_1_"+str(epoch)+".png", dpi=300)
                 plt.close()
 
 
@@ -390,9 +390,11 @@ omega_fine=x['omega_fine']
 omega=x['omega']
 # x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
 # x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
-# R = x['Two_Peak_R_interp']
 
-R = x['One_Peak_R_interp']
+R = x['Two_Peak_R_interp']
+
+
+# R = x['One_Peak_R_interp']
 # /gpfs/jlse-fs0/users/kraghavan/Inverse
 # Loaded=np.load('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/Inverse_new_Data.npz')
 # # E=Loaded['E'][0:1000,:]
