@@ -188,9 +188,11 @@ class Network(nn.Module):
         super(Network, self).__init__()
         self.selector=Network_selector(k=k)
         self.kern=torch.from_numpy(kern)
-        u, _, vh  = torch.linalg.svd(self.kern)
+        u, _, vh  = torch.svd(self.kern)
         # vh = torch.unsqueeze(vh, 0)
-        self.U=u
+        self.U=vh
+
+        # print("shapes U", self.U.shape, vh.shape)
         # self.U= torch.cat([vh for i in range(128)], dim=0)   
         self.kern_R=torch.from_numpy(kern_R)
         # self.inverter=torch.from_numpy(self.U)
@@ -202,7 +204,7 @@ class Network(nn.Module):
         # mean_l, var_l, a_l= self.inverter(x)
         # print("length", len(mean_l), len(var_l), mean_l[0].shape )
         select=self.selector(x)
-        print("select", select.shape, self.U.shape)
+        # print("select", select.shape, self.U.shape)
 
         #   2 / scale * scipy.stats.norm.pdf(t) * scipy.stats.norm.cdf(a*t)
         #   ! gauss(x) = 1/sqrt(2*pi)*exp(-x**2/2)
@@ -231,10 +233,11 @@ class Network(nn.Module):
         #####################################################################
         # print("the output", select.shape, f_t[0].shape, select.t().unsqueeze(2).shape)
         # print("selecto", select.shape)
-
-        print(select.shape, self.U.shape)
-        Rhat = torch.exp(torch.matmul(select, self.U))
-        print(Rhat.shape)
+        select=select.double()
+        self.U=self.U.double()
+        # print(select.shape, self.U.shape)
+        Rhat = torch.exp(torch.matmul(select, self.U.transpose(0,1)))
+        # print(Rhat.shape)
         #####################################################################
         # select=torch.repeat_interleave(select.t().unsqueeze(2), 2000, dim=2)
         # print("selecto maximo", select.shape)
@@ -372,19 +375,25 @@ class Network(nn.Module):
                     
 
                 fig.tight_layout()
-                plt.savefig("Samples_v3/Rhat_1_"+str(epoch)+".png", dpi=300)
+                plt.savefig("Samples_v1/Rhat_1_"+str(epoch)+".png", dpi=300)
                 plt.close()
 
 
 
 device = torch.device('cpu' if torch.cuda.is_available() else 'cpu')
-x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
+#x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
+x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
+
 print(x.keys())
 tau = x['tau']
 omega_fine=x['omega_fine']
 omega=x['omega']
-x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
+# x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
+# x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
+
 R = x['Two_Peak_R_interp']
+
+# /gpfs/jlse-fs0/users/kraghavan/Inverse
 
 # Loaded=np.load('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/Inverse_new_Data.npz')
 # # E=Loaded['E'][0:1000,:]
