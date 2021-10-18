@@ -375,14 +375,15 @@ class Network(nn.Module):
                     
 
                 fig.tight_layout()
-                plt.savefig("Sample_two_peak/Rhat_1_"+str(epoch)+".png", dpi=300)
+                plt.savefig("Sample_both_peak/Rhat_1_"+str(epoch)+".png", dpi=300)
                 plt.close()
 
 
 
 device = torch.device('cpu' if torch.cuda.is_available() else 'cpu')
-x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
-# x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
+# x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
+x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
+
 
 print(x.keys())
 tau = x['tau']
@@ -411,4 +412,4 @@ rbfnet = Network(Kern, Kern_R, k=20)
 rbfnet.to(device)
 # omega_fine = omega_fine/2000
 # print("I moved the model to device")
-_  =  rbfnet.fit(E, R, omega_fine, tau, 100, 128, 0.001)
+_  =  rbfnet.fit(E, R, omega_fine, tau, 25, 128, 0.001)

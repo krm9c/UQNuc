@@ -344,7 +344,7 @@ class Network(nn.Module):
                 # profiler.step()
 
 
-            if epoch % 2 ==0:
+            if epoch % 1 ==0:
                 ##########################################
                 import matplotlib.pyplot as plt
                 fig, ax = plt.subplots( 5,2, figsize=(12, 16) )
@@ -381,9 +381,8 @@ class Network(nn.Module):
 
 
 device = torch.device('cpu' if torch.cuda.is_available() else 'cpu')
-x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
-# x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
-
+# x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
+x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
 print(x.keys())
 tau = x['tau']
 omega_fine=x['omega_fine']
@@ -391,16 +390,13 @@ omega=x['omega']
 # x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
 # x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
 # R = x['Two_Peak_R_interp']
-
 R = x['One_Peak_R_interp']
 # /gpfs/jlse-fs0/users/kraghavan/Inverse
 # Loaded=np.load('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/Inverse_new_Data.npz')
-# # E=Loaded['E'][0:1000,:]
+## E=Loaded['E'][0:1000,:]
 # R=Loaded['R'][0:10000,:]
 # omega_fine = omega_fine/2000
 # omega = omega/2000
-
-
 E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
 print(E.shape, R.shape)
 # print("I defined the network")
@@ -408,6 +404,8 @@ Kern = Kern.astype('float64')
 Kern_R[:, (Kern_R.shape[1]-1)] = 1
 rbfnet = Network(Kern, Kern_R, k=20)
 rbfnet.to(device)
+
+
 # omega_fine = omega_fine/2000
 # print("I moved the model to device")
-_  =  rbfnet.fit(E, R, omega_fine, tau, 100, 128, 0.001)
+_  =  rbfnet.fit(E, R, omega_fine, tau, 50, 128, 0.001)

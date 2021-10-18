@@ -173,7 +173,7 @@ def worst_five(x, n):
 class Network_selector(nn.Module):
     def __init__(self, input_shape=151, k=2):
         super(Network_selector, self).__init__()
-        self.l1  =nn.Linear(in_features=151, out_features=151)
+        self.l1  =nn.Linear(in_features=152, out_features=151)
         self.l2  =nn.Linear(in_features=151, out_features=151)
         # self.soft=nn.Softmax(dim=1)
 
@@ -268,8 +268,14 @@ class Network(nn.Module):
         non_integrated_entropy = (Rhat-R-torch.mul(Rhat, torch.log(torch.div(Rhat, R))))
         loss_R = -torch.mean(non_integrated_entropy)
         # The E's loss
-        loss_E  = torch.mean(torch.mul((Ehat- E).pow(2), (1/(0.0001*0.0001))) )
-        return fac[0]*loss_R+fac[1]*loss_E, loss_E, loss_R
+        loss_E  = torch.mean(torch.mul((Ehat- E[:,:151]).pow(2), (1/(0.0001*0.0001))) )
+        # The uq loss
+        tt = E[:,151]
+        diff = Rhat - R
+        mask = (diff.ge(0).float() - tt.repeat(2000).view(-1, 2000)).detach()
+        loss_uq_R = (mask * diff).mean()
+
+        return (fac[0]*loss_R+fac[1]*loss_E+loss_uq_R), loss_E, loss_R
 
     ##########################################
     def fit(self, x, y, omega, tau, epochs, batch_size, lr):
@@ -284,7 +290,6 @@ class Network(nn.Module):
         scheduler = torch.optim.lr_scheduler.ExponentialLR(optimiser, gamma=0.99)
 
         print("Everything is defined now")
-
         ##########################################
         epoch = 0
         while epoch < epochs:
@@ -323,7 +328,11 @@ class Network(nn.Module):
                 optimiser.zero_grad()
 
                 ##########################################
-                x_batch = x_batch.float().to(device)
+                tt = torch.rand(x_batch.shape[0], 1).float()
+                x_batch = x_batch.float()
+                x_batch = torch.cat((x_batch, tt), 1)
+                x_batch = x_batch.to(device)
+
                 y_batch = y_batch.float().to(device)
                 xhat, yhat = self.forward(x_batch, omega, tau, epoch)
                 loss, E_L, R_L = self.loss_func(xhat, yhat, x_batch, y_batch, [factor_R, factor_E])
@@ -344,38 +353,71 @@ class Network(nn.Module):
                 # profiler.step()
 
 
-            if epoch % 2 ==0:
+            if epoch % 1 ==0:
                 ##########################################
                 import matplotlib.pyplot as plt
                 fig, ax = plt.subplots( 5,2, figsize=(12, 16) )
-                 
-                # curve =norm_pdf[0,:].detach().numpy()
-                # # print(curve.shape)
-                # plt.plot(omega.reshape([-1]), curve, label='norm pdf')
-                # curve =scaled_cdf[0,:].detach().numpy()
-                # plt.plot(omega.reshape([-1]), curve, label='scaled_cdf')
-                # curve =skewed_norm[0,:].detach().numpy()
-                # plt.plot(omega.reshape([-1]), curve, label='skewed_cdf')
+                alpha = 0.1
 
-                for i in range(5):
-                    curve=yhat[i,:].detach().numpy()
-                    ax[i][0].plot((omega).reshape([-1]), curve, label='Rhat')
-                    curve=y_batch[i,:].detach().numpy()
-                    ax[i][0].plot((omega).reshape([-1]), curve, '--', label='R')
-                    ax[i][0].legend(loc='upper right')
+                for x_batch, y_batch in trainloader:
+                    y_batch = y_batch.float()
+                    x_batch = x_batch.float()
+                    tt = torch.zeros(x_batch.size(0), 1)+(alpha/2)
+                    # print(x_batch.shape, tau.shape)
+                    x_batch_up = torch.cat((x_batch, (tt)), 1)
+                    # print(x_batch.shape, tau.shape)
+                    x_hat_up, y_hat_up = self.forward(x_batch_up, omega, tau, epoch)
+                    # print(y_hat.shape,y_batch.shape)
 
-                    curve=xhat[i,:].detach().numpy()
-                    ax[i][1].plot( (tau).reshape([-1]), curve, label='Ehat')
-                    curve=x_batch[i,:].detach().numpy()
-                    ax[i][1].plot((tau).reshape([-1]), curve, '--', label='E')
-                    ax[i][1].set_yscale('log')
-                    ax[i][1].legend(loc='upper right')
+                    tt = torch.zeros(x_batch.size(0), 1)+(1-alpha/2)
+                    # print(x_batch.shape, tau.shape)
+                    x_batch_down = torch.cat((x_batch, (tt)), 1)
+                    # print(x_batch.shape, tau.shape)
+                    x_hat_down, y_hat_down = self.forward(x_batch_down, omega, tau, epoch)
 
-                    ax[i][0].set_xlim([0,500])
+
+                    tt = torch.zeros(x_batch.size(0), 1)+(0.5)
+                    # print(x_batch.shape, tau.shape)
+                    x_batch_m = torch.cat((x_batch, (tt)), 1)
+                    # print(x_batch.shape, tau.shape)
+                    x_hat_m, y_hat_m = self.forward(x_batch_m, omega, tau, epoch)
+
+
                     
+                    for i in range(5):
+                        ## PLOT THINGS ABOUT THE R
+                        curve=y_batch[i,:].detach().numpy()
+                        ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R', color='blue')    
+                        R_up = y_hat_up.detach().numpy()[i, :]
+                        R_down = y_hat_down.detach().numpy()[i, :]
+                        yerr = (R_up - R_down)
+                        fill_up = R_up+yerr
+                        fill_down = R_down-yerr
+                        fill_down[fill_down<0]= 0
+                        ax[i][0].fill_between(omega_fine.reshape([-1]), fill_up, fill_down, alpha=0.2, color='orange')
+                        mean_E = y_hat_m.detach().numpy()[i,:]
+                        ax[i][0].errorbar(omega_fine.reshape([-1]), mean_E, yerr=yerr, fmt='x', linewidth=0.1, ms = 0.2, label='Rhat', color='orange')
+                        ax[i][0].set_xlim([0,500])
+                        ax[i][0].legend(loc='upper right')
 
+
+                        ## PLOT THINGS ABOUT THE E
+                        curve=x_batch[i,:].detach().numpy()
+                        ax[i][1].plot( (tau).reshape([-1]), curve, label='E', color='blue')    
+                        E_up = x_hat_up.detach().numpy()[i, :]
+                        E_down = x_hat_down.detach().numpy()[i, :]
+                        yerr = (E_up - E_down)
+                        fill_up = E_up+yerr
+                        fill_down = E_down-yerr
+                        fill_down[fill_down<0]= 0
+                        ax[i][1].fill_between(tau.reshape([-1]), fill_up, fill_down, alpha=1, color='orange')
+                        mean_E = x_hat_m.detach().numpy()[i,:]
+                        ax[i][1].errorbar(tau.reshape([-1]), mean_E, yerr=yerr, fmt='x', linewidth=0.1, ms = 0.2, label='Ehat', color='orange')
+                        ax[i][1].set_yscale('log')
+                        ax[i][1].legend(loc='upper right')
+                    break        
                 fig.tight_layout()
-                plt.savefig("Sample_two_peak/Rhat_1_"+str(epoch)+".png", dpi=300)
+                plt.savefig("Sample_one_peak_uq/Rhat_1_"+str(epoch)+".png", dpi=300)
                 plt.close()
 
 
@@ -384,6 +426,7 @@ device = torch.device('cpu' if torch.cuda.is_available() else 'cpu')
 # x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
 x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
 
+
 print(x.keys())
 tau = x['tau']
 omega_fine=x['omega_fine']
@@ -391,9 +434,8 @@ omega=x['omega']
 # x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
 # x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
 
-R = x['Two_Peak_R_interp']
-
-
+R = np.concatenate([x['One_Peak_R_interp']], axis=0)
+print(R.shape)
 # R = x['One_Peak_R_interp']
 # /gpfs/jlse-fs0/users/kraghavan/Inverse
 # Loaded=np.load('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/Inverse_new_Data.npz')
@@ -401,8 +443,7 @@ R = x['Two_Peak_R_interp']
 # R=Loaded['R'][0:10000,:]
 # omega_fine = omega_fine/2000
 # omega = omega/2000
-
-
+# R=R[0:1000,:]
 E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
 print(E.shape, R.shape)
 # print("I defined the network")
@@ -412,4 +453,4 @@ rbfnet = Network(Kern, Kern_R, k=20)
 rbfnet.to(device)
 # omega_fine = omega_fine/2000
 # print("I moved the model to device")
-_  =  rbfnet.fit(E, R, omega_fine, tau, 50, 128, 0.001)
+_  =  rbfnet.fit(E, R, omega_fine, tau, 25, 128, 0.001)
