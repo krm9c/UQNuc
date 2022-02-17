@@ -1,6 +1,7 @@
 #!/bin/bash
 ##!/bin/bash
 
+# ## The following is for running on theta gpu
 # export http_proxy=http://proxy.tmi.alcf.anl.gov:3128
 # export https_proxy=http://proxy.tmi.alcf.anl.gov:3128
 
@@ -20,17 +21,11 @@
 # # <<< conda initialize <<<
 # conda activate torchRL
 
-
-## mkdir one_peak_test
-# python uq_v.py 
-## --peak "one_peak"  --n_points 450000 --json_file "One_peak.json"  --output_model "one_peak_test/"  --input_flag 1  --output_flag 1 --factor_reset 10 --n_iterations  20
-# source deactivate
-
+## The following is for running on JLSE
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate tork
 
 # mkdir one_peak_test
-python uq_v_Both_UQ_05.py 
+python uq_v_Both_UQ_07.py
 #--peak "one_peak"  --n_points 450000 --json_file "One_peak.json"  --output_model "one_peak_test/"  --input_flag 1  --output_flag 1 --factor_reset 10 --n_iterations  20
 conda deactivate
-

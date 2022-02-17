@@ -7,10 +7,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math 
 
-torch.pi = torch.acos(torch.zeros(1)).item() 
-
 # Define the dataset class
 class MyDataset(Dataset):
+
     def __init__(self, x, y):
         self.x = x
         self.y = y
@@ -174,20 +173,20 @@ def worst_five(x, n):
 class Network_selector(nn.Module):
     def __init__(self, input_shape=151, k=2):
         super(Network_selector, self).__init__()
-        self.l1  =nn.Linear(in_features=151, out_features=151)
+        self.l1  =nn.Linear(in_features=152, out_features=151)
         self.l2  =nn.Linear(in_features=151, out_features=151)
-        self.l3  =nn.Linear(in_features=151, out_features=151)
+        # self.soft=nn.Softmax(dim=1)
 
     ##########################################
     def forward(self, x):
         x = x.float()
-        return self.l2(torch.nn.Sigmoid()(self.l1(x))), torch.nn.Sigmoid()( self.l3(torch.nn.Sigmoid()(self.l1(x))) )
+        return self.l2(torch.nn.Sigmoid()(self.l1(x)))
 
 
 class Network(nn.Module):
     def __init__(self, kern, kern_R, input_shape=151, k=2):
         super(Network, self).__init__()
-        self.selector = Network_selector(k=k)
+        self.selector=Network_selector(k=k)
         self.kern=torch.from_numpy(kern)
         u, _, vh  = torch.svd(self.kern)
         # vh = torch.unsqueeze(vh, 0)
@@ -204,7 +203,7 @@ class Network(nn.Module):
         x = x.float()
         # mean_l, var_l, a_l= self.inverter(x)
         # print("length", len(mean_l), len(var_l), mean_l[0].shape )
-        select, var =self.selector(x)
+        select=self.selector(x)
         # print("select", select.shape, self.U.shape)
 
         #   2 / scale * scipy.stats.norm.pdf(t) * scipy.stats.norm.cdf(a*t)
@@ -235,42 +234,48 @@ class Network(nn.Module):
         # print("the output", select.shape, f_t[0].shape, select.t().unsqueeze(2).shape)
         # print("selecto", select.shape)
         select=select.double()
-        var=var.double()
         self.U=self.U.double()
         # print(select.shape, self.U.shape)
-        Rhat = torch.exp(torch.matmul(select, self.U.transpose(0,1))) 
-        Rhat_var = torch.exp(torch.matmul(var, self.U.transpose(0,1))) 
-    
+        Rhat = torch.exp(torch.matmul(select, self.U.transpose(0,1)))
+        # print(Rhat.shape)
+        #####################################################################
+        # select=torch.repeat_interleave(select.t().unsqueeze(2), 2000, dim=2)
+        # print("selecto maximo", select.shape)
+        # F=torch.cat(f_t, dim=0)
+        # print("R hactor", F)
+        # print("selecto, Favtora", select)
+        # print("before mult", select.shape, F.shape)
+        # Rhat = (torch.sum(torch.mul(select, F), dim=0))
+        # print(Rhat.shape)
+        
         ##########################################
+        # We have convert this code to pytorch
+        # print(out.shape, self.kern.shape)
         Ehat = torch.matmul(self.kern, Rhat.transpose(0, 1)).transpose(0, 1)
         correction_term = Ehat[:, 0].view(-1, 1).repeat(1, 2000)
-        Ehat_var = torch.matmul(self.kern, Rhat_var.transpose(0, 1)).transpose(0, 1)
-        
         ##########################################
         # print(correction_term.shape, Ehat.shape, out.shape)
         Rhat = torch.div(Rhat, correction_term)
         multout = torch.matmul(self.kern, Rhat.transpose(0, 1))
         # print(multout.shape)
         Ehat = multout.transpose(0, 1)
-
-        ##########################################
-        # print(correction_term.shape, Ehat.shape, out.shape)
-        Rhat_var = torch.div(Rhat_var, correction_term)
-        multout_var = torch.matmul(self.kern, Rhat_var.transpose(0, 1))
-        # print(multout.shape)
-        Ehat_var = multout_var.transpose(0, 1)
-
         # Ehat=integrate(Rhat, omega, tau)
-        return Ehat, Rhat, Ehat_var, Rhat_var
+        return Ehat, Rhat
 
     ##########################################
-    def loss_func(self, Ehat, Rhat, Evar, Rvar, E, R, fac):
+    def loss_func(self, Ehat, Rhat, E, R, fac):
         # The R loss
         non_integrated_entropy = (Rhat-R-torch.mul(Rhat, torch.log(torch.div(Rhat, R))))
         loss_R = -torch.mean(non_integrated_entropy)
-        loss_E = torch.mean( torch.mul((Ehat- E).pow(2), (1/(0.0001*0.0001))) ) 
-        loss_var = -torch.mean( 0.5*torch.log( Rvar.pow(2) ) )
-        return (fac[0]*loss_R+fac[1]*(loss_E)+loss_var), loss_E, loss_R
+        # The E's loss
+        loss_E  = torch.mean(torch.mul((Ehat- E[:,:151]).pow(2), (1/(0.0001*0.0001))) )
+        # The uq loss
+        tt = E[:,151]
+        diff = Rhat - R
+        mask = (diff.ge(0).float() - tt.repeat(2000).view(-1, 2000)).detach()
+        loss_uq_R = (mask * diff).mean()
+
+        return (fac[0]*loss_R+fac[1]*loss_E+loss_uq_R), loss_E, loss_R
 
     ##########################################
     def fit(self, x, y, omega, tau, epochs, batch_size, lr):
@@ -281,18 +286,10 @@ class Network(nn.Module):
         x = torch.from_numpy(x)
         trainset = MyDataset(x, y)
         trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-        optimiser = torch.optim.RMSprop(self.parameters(), lr=lr, weight_decay=0.0001)
+        optimiser = torch.optim.RMSprop(self.parameters(), lr=lr, weight_decay=0)
         scheduler = torch.optim.lr_scheduler.ExponentialLR(optimiser, gamma=0.99)
-        P = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/Test_MEM_data.p')
-        R_test = np.concatenate([ P['One_Peak_R'], P['Two_Peak_R']], axis=0)
-        E_test = np.concatenate([ P['One_Peak_E'], P['Two_Peak_E']], axis=0)
-        # print(E_test.shape, R_test.shape)
-        E_test = torch.from_numpy(E_test)
-        R_test = torch.from_numpy(R_test)
-        testset = MyDataset(E_test, R_test)
-        testloader = DataLoader(testset, batch_size=batch_size, shuffle=True)
-        print("Everything is defined now")
 
+        print("Everything is defined now")
         ##########################################
         epoch = 0
         while epoch < epochs:
@@ -308,20 +305,20 @@ class Network(nn.Module):
                 factor_R=  1e6
                 factor_E = 1e-6
             elif epoch < int(round(epochs*0.2)):
-                factor_R=  1e6
-                factor_E = 1e-5
-                scheduler.step()
-            elif epoch < int(round(epochs*0.3)):
-                factor_R=  1e5
+                factor_R=  1e7
                 factor_E = 1e-4
                 scheduler.step()
+            elif epoch < int(round(epochs*0.3)):
+                factor_R=  1e8
+                factor_E = 1e-2
+                scheduler.step()
             elif epoch < int(round(epochs*0.4)):
-                factor_R= 1e5
-                factor_E= 1e-3
+                factor_R= 1e10
+                factor_E= 1e-1
                 scheduler.step()
             else:
-                factor_R=1e5
-                factor_E=1e-2
+                factor_R=1e10
+                factor_E=1
                 scheduler.step()
 
 
@@ -329,15 +326,16 @@ class Network(nn.Module):
             for x_batch, y_batch in trainloader:
                 batches += 1
                 optimiser.zero_grad()
+
                 ##########################################
                 tt = torch.rand(x_batch.shape[0], 1).float()
-                x_batch = x_batch.float()+(1e-03)*torch.randn(x_batch.size())
-                # x_batch = torch.cat((x_batch, tt), 1)
+                x_batch = x_batch.float()
+                x_batch = torch.cat((x_batch, tt), 1)
                 x_batch = x_batch.to(device)
 
                 y_batch = y_batch.float().to(device)
-                xhat, yhat, xvar, yvar = self.forward(x_batch, omega, tau, epoch)
-                loss, E_L, R_L = self.loss_func(xhat, yhat, xvar, yvar, x_batch, y_batch, [factor_R, factor_E])
+                xhat, yhat = self.forward(x_batch, omega, tau, epoch)
+                loss, E_L, R_L = self.loss_func(xhat, yhat, x_batch, y_batch, [factor_R, factor_E])
                 # print(loss, E_L, R_L)
                 current_loss    += (1/batches) * (loss.cpu().item() - current_loss)
                 current_loss_E  += (1/batches) * (E_L.cpu().item() - current_loss_E)
@@ -359,49 +357,67 @@ class Network(nn.Module):
                 ##########################################
                 import matplotlib.pyplot as plt
                 fig, ax = plt.subplots( 5,2, figsize=(12, 16) )
-                for x_batch, y_batch in testloader:
+                alpha = 0.1
+
+                for x_batch, y_batch in trainloader:
                     y_batch = y_batch.float()
                     x_batch = x_batch.float()
-                
-                    # tt = torch.zeros(x_batch.size(0), 1)+(alpha/2)
-                    # # print(x_batch.shape, tau.shape)
-                    # x_batch_up = torch.cat((x_batch, (tt)), 1)
+                    tt = torch.zeros(x_batch.size(0), 1)+(alpha/2)
                     # print(x_batch.shape, tau.shape)
-                    x_hat, y_hat, xvar, yvar = self.forward(x_batch, omega, tau, epoch)
+                    x_batch_up = torch.cat((x_batch, (tt)), 1)
+                    # print(x_batch.shape, tau.shape)
+                    x_hat_up, y_hat_up = self.forward(x_batch_up, omega, tau, epoch)
                     # print(y_hat.shape,y_batch.shape)
+
+                    tt = torch.zeros(x_batch.size(0), 1)+(1-alpha/2)
+                    # print(x_batch.shape, tau.shape)
+                    x_batch_down = torch.cat((x_batch, (tt)), 1)
+                    # print(x_batch.shape, tau.shape)
+                    x_hat_down, y_hat_down = self.forward(x_batch_down, omega, tau, epoch)
+
+
+                    tt = torch.zeros(x_batch.size(0), 1)+(0.5)
+                    # print(x_batch.shape, tau.shape)
+                    x_batch_m = torch.cat((x_batch, (tt)), 1)
+                    # print(x_batch.shape, tau.shape)
+                    x_hat_m, y_hat_m = self.forward(x_batch_m, omega, tau, epoch)
+
 
                     
                     for i in range(5):
                         ## PLOT THINGS ABOUT THE R
                         curve=y_batch[i,:].detach().numpy()
                         ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R', color='blue')    
-                        Rhat = y_hat.detach().numpy()[i, :]
-                        yerr = yvar.detach().numpy()[i, :]
-                        fill_up = Rhat+yerr
-                        fill_down = Rhat-yerr
+                        R_up = y_hat_up.detach().numpy()[i, :]
+                        R_down = y_hat_down.detach().numpy()[i, :]
+                        yerr = (R_up - R_down)
+                        fill_up = R_up+yerr
+                        fill_down = R_down-yerr
                         fill_down[fill_down<0]= 0
                         ax[i][0].fill_between(omega_fine.reshape([-1]), fill_up, fill_down, alpha=1, color='orange')
-                        # ax[i][0].errorbar(omega_fine.reshape([-1]), Rhat, yerr=yerr, fmt='x', linewidth=0.1, ms = 0.2, label='Rhat', color='orange')
+                        mean_E = y_hat_m.detach().numpy()[i,:]
+                        ax[i][0].errorbar(omega_fine.reshape([-1]), mean_E, yerr=yerr, fmt='x', linewidth=0.1, ms = 0.2, label='Rhat', color='orange')
                         ax[i][0].set_xlim([0,500])
-                        # ax[i][0].set_ylim([1e-10,1e-02])
                         ax[i][0].legend(loc='upper right')
 
 
                         ## PLOT THINGS ABOUT THE E
                         curve=x_batch[i,:].detach().numpy()
                         ax[i][1].plot( (tau).reshape([-1]), curve, label='E', color='blue')    
-                        Ehat = x_hat.detach().numpy()[i, :]
-                        yerr = xvar.detach().numpy()[i, :]
-                        fill_up = Ehat+yerr
-                        fill_down = Ehat-yerr
+                        E_up = x_hat_up.detach().numpy()[i, :]
+                        E_down = x_hat_down.detach().numpy()[i, :]
+                        yerr = (E_up - E_down)
+                        fill_up = E_up+yerr
+                        fill_down = E_down-yerr
                         fill_down[fill_down<0]= 0
                         ax[i][1].fill_between(tau.reshape([-1]), fill_up, fill_down, alpha=1, color='orange')
-                        # ax[i][1].errorbar(tau.reshape([-1]), Ehat, yerr=yerr, fmt='x', linewidth=0.1, ms = 0.2, label='Ehat', color='orange')
+                        mean_E = x_hat_m.detach().numpy()[i,:]
+                        ax[i][1].errorbar(tau.reshape([-1]), mean_E, yerr=yerr, fmt='x', linewidth=0.1, ms = 0.2, label='Ehat', color='orange')
                         ax[i][1].set_yscale('log')
                         ax[i][1].legend(loc='upper right')
                     break        
                 fig.tight_layout()
-                plt.savefig("sample_03/Rhat_1_"+str(epoch)+".png", dpi=300)
+                plt.savefig("Sample_two_peak_uq/Rhat_1_"+str(epoch)+".png", dpi=300)
                 plt.close()
 
 
@@ -418,7 +434,7 @@ omega=x['omega']
 # x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
 # x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
 
-R = np.concatenate([x['One_Peak_E_interp'], x['Two_Peak_R_interp']], axis=0)
+R = np.concatenate([x['Two_Peak_R_interp']], axis=0)
 print(R.shape)
 # R = x['One_Peak_R_interp']
 # /gpfs/jlse-fs0/users/kraghavan/Inverse
@@ -427,6 +443,7 @@ print(R.shape)
 # R=Loaded['R'][0:10000,:]
 # omega_fine = omega_fine/2000
 # omega = omega/2000
+# R=R[0:1000,:]
 E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
 print(E.shape, R.shape)
 # print("I defined the network")

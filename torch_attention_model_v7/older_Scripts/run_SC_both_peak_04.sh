@@ -1,8 +1,11 @@
 #!/bin/bash
+
+
 ##!/bin/bash
 
 # export http_proxy=http://proxy.tmi.alcf.anl.gov:3128
 # export https_proxy=http://proxy.tmi.alcf.anl.gov:3128
+
 
 # # >>> conda initialize >>>
 # # !! Contents within this block are managed by 'conda init' !!
@@ -18,19 +21,24 @@
 # fi
 # unset __conda_setup
 # # <<< conda initialize <<<
+
+
 # conda activate torchRL
 
 
-## mkdir one_peak_test
+# # mkdir one_peak_test
 # python uq_v.py 
-## --peak "one_peak"  --n_points 450000 --json_file "One_peak.json"  --output_model "one_peak_test/"  --input_flag 1  --output_flag 1 --factor_reset 10 --n_iterations  20
+
+# # --peak "one_peak"  --n_points 450000 --json_file "One_peak.json"  --output_model "one_peak_test/"  --input_flag 1  --output_flag 1 --factor_reset 10 --n_iterations  20
 # source deactivate
 
 source ~/miniconda3/etc/profile.d/conda.sh
-conda activate tork
+
+source activate tork
 
 # mkdir one_peak_test
-python uq_v_Both_UQ_05.py 
-#--peak "one_peak"  --n_points 450000 --json_file "One_peak.json"  --output_model "one_peak_test/"  --input_flag 1  --output_flag 1 --factor_reset 10 --n_iterations  20
+python uq_v_Both_UQ_04.py 
+
+# --peak "one_peak"  --n_points 450000 --json_file "One_peak.json"  --output_model "one_peak_test/"  --input_flag 1  --output_flag 1 --factor_reset 10 --n_iterations  20
 conda deactivate
 

@@ -269,11 +269,13 @@ class Network(nn.Module):
                 # Loss: %f' %(epoch, progress, obs, current_loss))
                 sys.stdout.flush()
                 # profiler.step()
+
+
             if epoch % 1 ==0:
                 ####################################################################################
                 import matplotlib.pyplot as plt
+                fig, ax = plt.subplots( 3,2, figsize=(16,9) )
                 for j in range(5):
-                    fig, ax = plt.subplots( 5,2, figsize=(16,15) )
                     for x_batch, y_batch in testloader_one:
                         y_batch = y_batch.float().to(device)
                         x_batch = x_batch.float().to(device)
@@ -283,11 +285,11 @@ class Network(nn.Module):
                         # print(x_batch.shape, tau.shape)
                         # x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-03)
                         # print(y_hat.shape,y_batch.shape)
-                        for i in range(5):
-                            x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-05*pow(10,i))
+                        for i in range(3):
+                            x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-03*pow(10,i))
                             ## PLOT THINGS ABOUT THE R
                             curve=y_batch[j,:].cpu().detach().numpy()
-                            ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(1e-05*pow(10,i))+')', color='blue')    
+                            ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(1e-03*pow(10,i))+')', color='blue')    
                             Rhat = y_hat.cpu().detach().numpy()[j, :]
                             yerr = (yvar.cpu().detach().numpy()[j, :]-Rhat)
                             fill_up = Rhat+yerr
@@ -315,11 +317,11 @@ class Network(nn.Module):
                             ax[i][0].set_ylabel('$ R(\\omega)(MeV^{-1})$')
                             ax[i][1].set_ylabel('$ E(\\tau)$')
                         fig.tight_layout()
-                        plt.savefig("sample_01/Rhat_One_"+str(epoch)+'_'+str(j)+".png", dpi=300)
+                        plt.savefig("sample_08/Rhat_One_"+str(epoch)+'_'+str(j)+".png", dpi=300)
                         plt.close()
                         break
 
-                    fig, ax = plt.subplots( 5,2, figsize=(16,15) )
+                    fig, ax = plt.subplots( 3,2, figsize=(16,9) )
                     for x_batch, y_batch in testloader_two:
                         y_batch = y_batch.float().to(device)
                         x_batch = x_batch.float().to(device)
@@ -329,11 +331,11 @@ class Network(nn.Module):
                         # print(x_batch.shape, tau.shape)
                         # x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-03)
                         # print(y_hat.shape,y_batch.shape)
-                        for i in range(5):
-                            x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-05*pow(10,i))
+                        for i in range(3):
+                            x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-03*pow(10,i))
                             ## PLOT THINGS ABOUT THE R
                             curve=y_batch[j,:].cpu().detach().numpy()
-                            ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(1e-05*pow(10,i))+')', color='blue')    
+                            ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(1e-03*pow(10,i))+')', color='blue')    
                             Rhat = y_hat.cpu().detach().numpy()[j, :]
                             yerr = (yvar.cpu().detach().numpy()[j, :]-Rhat)
                             fill_up = Rhat+yerr
@@ -362,7 +364,7 @@ class Network(nn.Module):
                             ax[i][1].legend(loc='upper right')
                                 
                         fig.tight_layout()
-                        plt.savefig("sample_01/Rhat_Two_"+str(epoch)+'_'+str(j)+".png", dpi=300)
+                        plt.savefig("sample_08/Rhat_Two_"+str(epoch)+'_'+str(j)+".png", dpi=300)
                         torch.save(self.state_dict(), 'one_two')
                         plt.close()
                         break
@@ -492,7 +494,7 @@ rbfnet = Network(Kern, Kern_R, k=20)
 ## The actual model
 rbfnet.load_state_dict(torch.load('modella_converged_5'))
 rbfnet.to(device)
-rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, 120, 128, 0.001)
+rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, 20, 128, 0.001)
 torch.save(rbfnet.state_dict(), 'modella_converged_6')
 
 

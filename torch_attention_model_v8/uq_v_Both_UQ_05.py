@@ -189,9 +189,9 @@ class Network(nn.Module):
         # The R loss
         non_integrated_entropy = (Rhat-R-torch.mul(Rhat, torch.log(torch.div(Rhat, R))))
         loss_R = -torch.mean(non_integrated_entropy)
-        loss_E = torch.mean( torch.mul((Ehat- E).pow(2), (1/(0.0001*0.0001))))\
-               + torch.mean( torch.mul((EN- ENhat).pow(2), (1/(0.0001*0.0001))) ) 
-        return (fac[0]*loss_R+fac[1]), loss_E, loss_R
+        loss_E = torch.mean( torch.mul((Ehat   -E).pow(2), (1/(0.0001*0.0001))))\
+               + torch.mean( torch.mul((EN -ENhat).pow(2), (1/(fac[2]*fac[2]))) ) 
+        return (fac[0]*loss_R+fac[1]*loss_E), loss_E, loss_R
 
     ####################################################################################
     def fit(self, trainloader, testloader_one, testloader_two,  omega, tau, epochs, batch_size, lr):
@@ -216,30 +216,34 @@ class Network(nn.Module):
             fac_var=1e-03
 
             ####################################################################################
-            if epoch < int(round(epochs*0.1)):
-                factor_R=  1e7
-                factor_E = 1
-                fac_var=1e-04
-                
+            if epoch < int(round(epochs*0.2)):
+                factor_R=  1e6
+                factor_E = 1e-6
+                fac_var=1e-5
+            elif epoch < int(round(epochs*0.25)):
+                factor_R=  1e5
+                factor_E = 1e-5
+                fac_var=1e-4
+                scheduler.step()
             elif epoch < int(round(epochs*0.3)):
-                factor_R=  1e7
-                factor_E = 1
-                fac_var=1e-04
+                factor_R=  1e4
+                factor_E = 1e-4
+                fac_var=1e-3
+                scheduler.step()
+            elif epoch < int(round(epochs*0.4)):
+                factor_R= 1e3
+                factor_E= 1e-3
+                fac_var=1e-2
                 scheduler.step()
             elif epoch < int(round(epochs*0.5)):
-                factor_R=  1e7
-                factor_E = 1
-                fac_var=1e-04
-                scheduler.step()
-            elif epoch < int(round(epochs*0.7)):
-                factor_R= 1e7
-                factor_E= 1
-                fac_var=1e-04
+                factor_R= 1e3
+                factor_E= 1e-3
+                fac_var=1e-2
                 scheduler.step()
             else:
-                factor_R=1e7
-                factor_E=1
-                fac_var=1e-04
+                factor_R=1e1
+                factor_E=1e-1
+                fac_var=1
                 scheduler.step()
 
             ####################################################################################
@@ -253,7 +257,7 @@ class Network(nn.Module):
     
                 y_batch = y_batch.float().to(device)
                 xhat, yhat, xNhat, _, x_batch_N = self.forward(x_batch, fac_var)
-                loss, E_L, R_L = self.loss_func(xhat, xNhat, yhat, x_batch, x_batch_N, y_batch, [factor_R, factor_E])
+                loss, E_L, R_L = self.loss_func(xhat, xNhat, yhat, x_batch, x_batch_N, y_batch, [factor_R, factor_E, fac_var])
 
                 current_loss      += (1/batches) * (loss.cpu().item() - current_loss)
                 current_loss_E    += (1/batches) * (E_L.cpu().item() - current_loss_E)
@@ -490,10 +494,10 @@ print("Everything is defined now")
 rbfnet = Network(Kern, Kern_R, k=20)
 
 ## The actual model
-rbfnet.load_state_dict(torch.load('modella_converged_5'))
+# rbfnet.load_state_dict(torch.load('modella_converged_5'))
 rbfnet.to(device)
-rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, 120, 128, 0.001)
-torch.save(rbfnet.state_dict(), 'modella_converged_6')
+rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, 200, 128, 0.001)
+torch.save(rbfnet.state_dict(), 'modella_converged_1')
 
 
 

@@ -268,7 +268,7 @@ class Network(nn.Module):
         loss_E = torch.mean( torch.mul((Ehat- E).pow(2), (1/(0.0001*0.0001))) ) 
         loss_var= -torch.mean(Rvar-fac[2]-torch.mul(Rvar, torch.log(torch.div(Rhat, fac[2] )))) \
                   -torch.mean(Evar-fac[2]-torch.mul(Evar, torch.log(torch.div(Ehat, fac[2] ))))
-        return (fac[0]*loss_R+fac[1]*(loss_E)+ loss_var), loss_E, loss_R, loss_var
+        return (fac[0]*loss_R+fac[1]*(loss_E)+loss_var), loss_E, loss_R, loss_var
 
     ####################################################################################
     def fit(self, trainloader, testloader_one, testloader_two,  omega, tau, epochs, batch_size, lr):
@@ -290,31 +290,30 @@ class Network(nn.Module):
             progress = 0
 
             ####################################################################################
-            if epoch < int(round(epochs*0.1)):
+            if epoch < int(round(epochs*0.2)):
                 factor_R=  1e6
                 factor_E = 1e-6
                 fac_var=1e-03
-            elif epoch < int(round(epochs*0.2)):
+            elif epoch < int(round(epochs*0.25)):
                 factor_R=  1e6
                 factor_E = 1e-5
-                fac_var=1e-02
+                fac_var=1e-3
                 scheduler.step()
             elif epoch < int(round(epochs*0.3)):
                 factor_R=  1e5
                 factor_E = 1e-4
-                fac_var=1e-02
+                fac_var=1e-2
                 scheduler.step()
             elif epoch < int(round(epochs*0.4)):
                 factor_R= 1e5
                 factor_E= 1e-3
-                fac_var=1e-01
+                fac_var=1e-2
                 scheduler.step()
             else:
                 factor_R=1e5
                 factor_E=1e-2
-                fac_var=1e-01
+                fac_var=1e-1
                 scheduler.step()
-
 
             ####################################################################################
             for x_batch, y_batch in trainloader:
@@ -322,7 +321,7 @@ class Network(nn.Module):
                 optimiser.zero_grad()
                 ####################################################################################
                 tt = torch.rand(x_batch.shape[0], 1).float()
-                x_batch = x_batch.float()+(1e-01)*torch.randn(x_batch.size())
+                x_batch = x_batch.float()
                 # x_batch = torch.cat((x_batch, tt), 1)
                 x_batch = x_batch.to(device)
 
@@ -438,15 +437,18 @@ class Network(nn.Module):
                         ax[i][1].set_yscale('log')
                         ax[i][1].legend(loc='upper right')
                     break        
+
+
                 fig.tight_layout()
                 plt.savefig("sample_06/Rhat_Two_"+str(epoch)+".png", dpi=300)
+                torch.save(self.state_dict(), 'one_two')
                 plt.close()
+    
+        return self
 
 
-
-
-x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
-# x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
+# x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
+x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
 print(x.keys())
 tau = x['tau']
 omega_fine=x['omega_fine']
@@ -478,9 +480,9 @@ y = torch.from_numpy(R)
 trainset = MyDataset(x, y)
 trainloader = DataLoader(trainset, batch_size=128, shuffle=True)
 ## ThetaGPU
-P = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/Test_MEM_data.p')
+# P = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/Test_MEM_data.p')
 ## JLSE
-# P = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/Test_MEM_data.p')
+P = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/Test_MEM_data.p')
 R_test = np.concatenate([  P['Two_Peak_R']], axis=0)
 E_test = np.concatenate([ P['Two_Peak_E']], axis=0)
 # print(E_test.shape, R_test.shape)
@@ -498,8 +500,13 @@ testset_one = MyDataset(E_test, R_test)
 testloader_one = DataLoader(testset_one, batch_size=128, shuffle=True)
 
 ## The full data is not going to the gpu now.
-device = torch.device('cpu' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("Everything is defined now")
 rbfnet = Network(Kern, Kern_R, k=20)
+
+
+
 rbfnet.to(device)
-_  =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, 100, 128, 0.001)
+
+rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, 100, 128, 0.001)
+torch.save(rbfnet.state_dict(), 'one_two')

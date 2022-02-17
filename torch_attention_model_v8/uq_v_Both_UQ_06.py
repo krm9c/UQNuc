@@ -141,7 +141,7 @@ class Network_selector(nn.Module):
         return self.l2(torch.nn.Sigmoid()(self.l1(x)))
 
 
-class Network(nn.Module):
+class Network(nn.Module):6
     def __init__(self, kern, kern_R, input_shape=151, k=2):
         super(Network, self).__init__()
         self.selector = Network_selector(k=k).to(device)
@@ -171,7 +171,7 @@ class Network(nn.Module):
         Ehat = multout.transpose(0, 1)
 
         x_batch_N = (x+sigma*torch.rand(x.size()).to(device))
-        select_N=self.selector(x_batch_N).double().to(device)
+        select_N=self.selector(x).double().to(device)
         Rhat_N = torch.exp(torch.matmul(select_N, self.U.transpose(0,1))) 
         # Normalize E
         ####################################################################################
@@ -180,7 +180,6 @@ class Network(nn.Module):
         Rhat_N = torch.div(Rhat_N, correction_term)
         multout_N = torch.matmul(self.kern, Rhat.transpose(0, 1))
         Ehat_N = multout_N.transpose(0, 1)
-
 
         return Ehat, Rhat, Ehat_N, Rhat_N, x_batch_N
 
@@ -211,36 +210,62 @@ class Network(nn.Module):
             current_loss_R = 0
             batches = 0
             progress = 0
-            factor_R=  1
-            factor_E = 1
-            fac_var=1e-03
-
+            # factor_R=  1
+            # factor_E = 1
+            # fac_var=1e-03
             ####################################################################################
-            if epoch < int(round(epochs*0.1)):
-                factor_R=  1e7
-                factor_E = 1
-                fac_var=1e-04
-                
+            ####################################################################################
+            if epoch < int(round(epochs*0.2)):
+                factor_R=  1e6
+                factor_E = 1e-6
+                fac_var=1e-02
+            elif epoch < int(round(epochs*0.25)):
+                factor_R=  1e6
+                factor_E = 1e-5
+                fac_var=1e-3
+                scheduler.step()
             elif epoch < int(round(epochs*0.3)):
-                factor_R=  1e7
-                factor_E = 1
-                fac_var=1e-04
+                factor_R=  1e5
+                factor_E = 1e-4
+                fac_var=1e-3
                 scheduler.step()
-            elif epoch < int(round(epochs*0.5)):
-                factor_R=  1e7
-                factor_E = 1
-                fac_var=1e-04
-                scheduler.step()
-            elif epoch < int(round(epochs*0.7)):
-                factor_R= 1e7
-                factor_E= 1
-                fac_var=1e-04
+            elif epoch < int(round(epochs*0.4)):
+                factor_R= 1e5
+                factor_E= 1e-3
+                fac_var=1e-2
                 scheduler.step()
             else:
-                factor_R=1e7
-                factor_E=1
-                fac_var=1e-04
+                factor_R=1e5
+                factor_E=1e-2
+                fac_var=1e-1
                 scheduler.step()
+
+            
+            # if epoch < int(round(epochs*0.1)):
+            #     factor_R=  1e7
+            #     factor_E = 1
+            #     fac_var=1e-04
+                
+            # elif epoch < int(round(epochs*0.3)):
+            #     factor_R=  1e7
+            #     factor_E = 1
+            #     fac_var=1e-04
+            #     scheduler.step()
+            # elif epoch < int(round(epochs*0.5)):
+            #     factor_R=  1e7
+            #     factor_E = 1
+            #     fac_var=1e-04
+            #     scheduler.step()
+            # elif epoch < int(round(epochs*0.7)):
+            #     factor_R= 1e7
+            #     factor_E= 1
+            #     fac_var=1e-04
+            #     scheduler.step()
+            # else:
+            #     factor_R=1e7
+            #     factor_E=1
+            #     fac_var=1e-04
+            #     scheduler.step()
 
             ####################################################################################
             for x_batch, y_batch in trainloader:
@@ -250,10 +275,11 @@ class Network(nn.Module):
                 x_batch = x_batch.float()
                 x_batch   = x_batch.to(device)
 
-    
                 y_batch = y_batch.float().to(device)
                 xhat, yhat, xNhat, _, x_batch_N = self.forward(x_batch, fac_var)
-                loss, E_L, R_L = self.loss_func(xhat, xNhat, yhat, x_batch, x_batch_N, y_batch, [factor_R, factor_E])
+                loss, E_L, R_L = self.loss_func( xhat, xNhat, yhat, x_batch,\
+                                                x_batch_N, y_batch, \
+                                                [factor_R, factor_E] )
 
                 current_loss      += (1/batches) * (loss.cpu().item() - current_loss)
                 current_loss_E    += (1/batches) * (E_L.cpu().item() - current_loss_E)
@@ -269,12 +295,15 @@ class Network(nn.Module):
                 # Loss: %f' %(epoch, progress, obs, current_loss))
                 sys.stdout.flush()
                 # profiler.step()
+
             if epoch % 1 ==0:
                 ####################################################################################
                 import matplotlib.pyplot as plt
                 for j in range(5):
-                    fig, ax = plt.subplots( 5,2, figsize=(16,15) )
+
+                    fig, ax = plt.subplots(5,2, figsize=(16,15))
                     for x_batch, y_batch in testloader_one:
+
                         y_batch = y_batch.float().to(device)
                         x_batch = x_batch.float().to(device)
                         # tt = torch.zeros(x_batch.size(0), 1)+(alpha/2)
@@ -283,11 +312,13 @@ class Network(nn.Module):
                         # print(x_batch.shape, tau.shape)
                         # x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-03)
                         # print(y_hat.shape,y_batch.shape)
+
                         for i in range(5):
+
                             x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-05*pow(10,i))
                             ## PLOT THINGS ABOUT THE R
                             curve=y_batch[j,:].cpu().detach().numpy()
-                            ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(1e-05*pow(10,i))+')', color='blue')    
+                            ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(1e-03*pow(10,i))+')', color='blue')    
                             Rhat = y_hat.cpu().detach().numpy()[j, :]
                             yerr = (yvar.cpu().detach().numpy()[j, :]-Rhat)
                             fill_up = Rhat+yerr
@@ -314,12 +345,15 @@ class Network(nn.Module):
                             ax[i][1].set_xlabel('$ \\tau (MeV^{-1})$')
                             ax[i][0].set_ylabel('$ R(\\omega)(MeV^{-1})$')
                             ax[i][1].set_ylabel('$ E(\\tau)$')
+
                         fig.tight_layout()
-                        plt.savefig("sample_01/Rhat_One_"+str(epoch)+'_'+str(j)+".png", dpi=300)
+                        plt.savefig("sample_02/Rhat_One_"+str(epoch)+'_'+str(j)+".png", dpi=300)
                         plt.close()
+
                         break
 
-                    fig, ax = plt.subplots( 5,2, figsize=(16,15) )
+
+                    fig, ax = plt.subplots(5,2, figsize=(16,15))
                     for x_batch, y_batch in testloader_two:
                         y_batch = y_batch.float().to(device)
                         x_batch = x_batch.float().to(device)
@@ -329,11 +363,13 @@ class Network(nn.Module):
                         # print(x_batch.shape, tau.shape)
                         # x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-03)
                         # print(y_hat.shape,y_batch.shape)
+
                         for i in range(5):
+
                             x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-05*pow(10,i))
                             ## PLOT THINGS ABOUT THE R
                             curve=y_batch[j,:].cpu().detach().numpy()
-                            ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(1e-05*pow(10,i))+')', color='blue')    
+                            ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(1e-03*pow(10,i))+')', color='blue')    
                             Rhat = y_hat.cpu().detach().numpy()[j, :]
                             yerr = (yvar.cpu().detach().numpy()[j, :]-Rhat)
                             fill_up = Rhat+yerr
@@ -359,15 +395,13 @@ class Network(nn.Module):
                             ax[i][1].set_xlabel('$ \\tau (MeV^{-1})$')
                             ax[i][0].set_ylabel('$ R(\\omega)(MeV^{-1})$')
                             ax[i][1].set_ylabel('$ E(\\tau)$')
-                            ax[i][1].legend(loc='upper right')
-                                
+                            ax[i][1].legend(loc='upper right')  
+
                         fig.tight_layout()
-                        plt.savefig("sample_01/Rhat_Two_"+str(epoch)+'_'+str(j)+".png", dpi=300)
+                        plt.savefig("sample_02/Rhat_Two_"+str(epoch)+'_'+str(j)+".png", dpi=300)
                         torch.save(self.state_dict(), 'one_two')
                         plt.close()
-                        break
-                    
-
+                        break 
 
                 ### Final Numbers 
                 Ent_list_one =[]
@@ -386,6 +420,7 @@ class Network(nn.Module):
                     my_list = chi2_vec(x_batch.cpu().detach().numpy(), x_hat.cpu().detach().numpy(), 1e-04)
                     [chi2_one.append(item) for item in my_list]
                     # np.append( chi2_one, chi2_vec(x_batch.cpu().detach().numpy(), x_hat.cpu().detach().numpy(), 1e-04).reshape([-1,1]), axis = 0)
+                
                 for x_batch, y_batch in testloader_two:
                     y_batch = y_batch.float().to(device)
                     x_batch = x_batch.float().to(device)
@@ -397,6 +432,7 @@ class Network(nn.Module):
                     # Calculate Chi_squared
                     my_list = chi2_vec(x_batch.cpu().detach().numpy(), x_hat.cpu().detach().numpy(), 1e-04)
                     [chi2_two.append(item) for item in my_list]
+                
                 print("\n #######################ENTROPIES#################################")
                 # print("Entropy shapes", len(Ent_list_one), len(Ent_list_two) )
                 Ent_list_two=np.array(Ent_list_two)
@@ -413,7 +449,9 @@ class Network(nn.Module):
                 print("Max", np.max(Ent_list_two) )
                 print("Mean", Ent_list_two.mean())
                 print("std", Ent_list_two.std())
-                print("########################################################")
+                print("######################################################## \n")
+                print("   ")
+                print("   ")
                 print("\n #######################Chi 2################################# \n")
                 # print("Chi 2 shapes", len(chi2_one), len(chi2_two))
                 chi2_one=np.array(chi2_one)
@@ -438,8 +476,6 @@ class Network(nn.Module):
 # x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
 ## Theta
 x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
-
-
 tau = x['tau']
 omega_fine=x['omega_fine']
 omega=x['omega']
@@ -451,19 +487,15 @@ Kern = Kern.astype('float64')
 Kern_R[:, (Kern_R.shape[1]-1)] = 1
 print(torch.cuda.is_available())
 torch.pi = torch.acos(torch.zeros(1)).item() 
-
 x = torch.from_numpy(E)
 y = torch.from_numpy(R)
 trainset = MyDataset(x, y)
 trainloader = DataLoader(trainset, batch_size=128, shuffle=True)
 
-
 ## ThetaGPU
 # P = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/Test_MEM_data.p')
-
 ## JLSE
 P = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/Test_MEM_data.p')
-
 
 # The test data (one peak)
 R_test_1 = np.concatenate([  P['Two_Peak_R']], axis=0)
@@ -473,8 +505,6 @@ E_test_1 = torch.from_numpy(E_test_1)
 R_test_1 = torch.from_numpy(R_test_1)
 testset_two = MyDataset(E_test_1, R_test_1)
 testloader_two = DataLoader(testset_two, batch_size=128, shuffle=False)
-
-
 # The test data (two peak)
 R_test_2 = np.concatenate([  P['One_Peak_R']], axis=0)
 E_test_2 = np.concatenate([ P['One_Peak_E']], axis=0)
@@ -483,17 +513,15 @@ E_test_2 = torch.from_numpy(E_test_2)
 R_test_2 = torch.from_numpy(R_test_2)
 testset_one = MyDataset(E_test_2, R_test_2)
 testloader_one = DataLoader(testset_one, batch_size=128, shuffle=False)
-
 ## The device
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("Everything is defined now")
 rbfnet = Network(Kern, Kern_R, k=20)
-
 ## The actual model
-rbfnet.load_state_dict(torch.load('modella_converged_5'))
+# rbfnet.load_state_dict(torch.load('modella_converged_5'))
 rbfnet.to(device)
 rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, 120, 128, 0.001)
-torch.save(rbfnet.state_dict(), 'modella_converged_6')
+torch.save(rbfnet.state_dict(), 'modella_converged_without_E_noise')
 
 
 

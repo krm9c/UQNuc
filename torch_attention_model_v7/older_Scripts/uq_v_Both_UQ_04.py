@@ -199,8 +199,7 @@ class Network(nn.Module):
         obs = 1000000
         LR = []
         LE = []
-        optimiser = torch.optim.RMSprop(self.parameters(),\
-            lr=lr, weight_decay=0.00001)
+        optimiser = torch.optim.RMSprop(self.parameters(), lr=lr, weight_decay=0.00001)
         scheduler = torch.optim.lr_scheduler.ExponentialLR(optimiser, gamma=0.99)
         ####################################################################################
         epoch = 0
@@ -211,35 +210,31 @@ class Network(nn.Module):
             current_loss_R = 0
             batches = 0
             progress = 0
-            factor_R=  1
-            factor_E = 1
-            fac_var=1e-03
 
             ####################################################################################
             if epoch < int(round(epochs*0.1)):
-                factor_R=  1e7
-                factor_E = 1
+                factor_R=  1e6
+                factor_E = 1e-6
                 fac_var=1e-04
-                
             elif epoch < int(round(epochs*0.3)):
-                factor_R=  1e7
-                factor_E = 1
-                fac_var=1e-04
+                factor_R=  1e6
+                factor_E = 1e-5
+                fac_var=1e-3
                 scheduler.step()
             elif epoch < int(round(epochs*0.5)):
-                factor_R=  1e7
-                factor_E = 1
-                fac_var=1e-04
+                factor_R=  1e5
+                factor_E = 1e-4
+                fac_var=1e-2
                 scheduler.step()
             elif epoch < int(round(epochs*0.7)):
-                factor_R= 1e7
-                factor_E= 1
-                fac_var=1e-04
+                factor_R= 1e5
+                factor_E= 1e-3
+                fac_var=1e-1
                 scheduler.step()
             else:
-                factor_R=1e7
-                factor_E=1
-                fac_var=1e-04
+                factor_R=1e5
+                factor_E=1e-2
+                fac_var=1
                 scheduler.step()
 
             ####################################################################################
@@ -269,111 +264,114 @@ class Network(nn.Module):
                 # Loss: %f' %(epoch, progress, obs, current_loss))
                 sys.stdout.flush()
                 # profiler.step()
+
+
             if epoch % 1 ==0:
                 ####################################################################################
                 import matplotlib.pyplot as plt
-                for j in range(5):
-                    fig, ax = plt.subplots( 5,2, figsize=(16,15) )
-                    for x_batch, y_batch in testloader_one:
-                        y_batch = y_batch.float().to(device)
-                        x_batch = x_batch.float().to(device)
-                        # tt = torch.zeros(x_batch.size(0), 1)+(alpha/2)
-                        # # print(x_batch.shape, tau.shape)
-                        # x_batch_up = torch.cat((x_batch, (tt)), 1)
-                        # print(x_batch.shape, tau.shape)
-                        # x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-03)
-                        # print(y_hat.shape,y_batch.shape)
-                        for i in range(5):
-                            x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-05*pow(10,i))
-                            ## PLOT THINGS ABOUT THE R
-                            curve=y_batch[j,:].cpu().detach().numpy()
-                            ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(1e-05*pow(10,i))+')', color='blue')    
-                            Rhat = y_hat.cpu().detach().numpy()[j, :]
-                            yerr = (yvar.cpu().detach().numpy()[j, :]-Rhat)
-                            fill_up = Rhat+yerr
-                            fill_down = Rhat-yerr
-                            fill_down[fill_down<0]= 0
-                            ax[i][0].fill_between(omega_fine.reshape([-1]), fill_up, fill_down, alpha=1, color='orange')
-                            # ax[i][0].errorbar(omega_fine.reshape([-1]), Rhat, yerr=yerr, fmt='x', linewidth=0.1, ms = 0.2, label='Rhat', color='orange')
-                            ax[i][0].set_xlim([0,400])
-                            # ax[i][0].set_ylim([1e-10,1e-02])
-                            ax[i][0].legend(loc='upper right')
-                            ## PLOT THINGS ABOUT THE E
-                            curve=x_batch[j,:].cpu().detach().numpy()
-                            ax[i][1].plot( (tau).reshape([-1]), curve, label='E', color='blue')    
-                            Ehat = x_hat.cpu().detach().numpy()[j, :]
-                            yerr = abs(Ehat-xvar.cpu().detach().numpy()[j, :])
-                            # fill_up = Ehat+yerr
-                            # fill_down = Ehat-yerr
-                            # fill_down[fill_down<0]= 0
-                            # ax[i][1].fill_between(tau.reshape([-1]), fill_up, fill_down, alpha=1, color='orange')
-                            ax[i][1].errorbar(tau.reshape([-1]), Ehat, yerr=yerr, fmt='x', linewidth=2, ms = 1, label='Ehat', color='orange')
-                            ax[i][1].set_yscale('log')
-                            ax[i][1].legend(loc='upper right')
-                            ax[i][0].set_xlabel('$ \\omega (MeV)$')
-                            ax[i][1].set_xlabel('$ \\tau (MeV^{-1})$')
-                            ax[i][0].set_ylabel('$ R(\\omega)(MeV^{-1})$')
-                            ax[i][1].set_ylabel('$ E(\\tau)$')
-                        fig.tight_layout()
-                        plt.savefig("sample_01/Rhat_One_"+str(epoch)+'_'+str(j)+".png", dpi=300)
-                        plt.close()
-                        break
+                fig, ax = plt.subplots( 5,2, figsize=(12, 16) )
+                for x_batch, y_batch in testloader_one:
+                    y_batch = y_batch.float().to(device)
+                    x_batch = x_batch.float().to(device)
+                    # tt = torch.zeros(x_batch.size(0), 1)+(alpha/2)
+                    # # print(x_batch.shape, tau.shape)
+                    # x_batch_up = torch.cat((x_batch, (tt)), 1)
+                    # print(x_batch.shape, tau.shape)
+                    # x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-03)
+                    # print(y_hat.shape,y_batch.shape)
+                    for i in range(5):
+                        x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-05*pow(10,i))
+                        ## PLOT THINGS ABOUT THE R
+                        curve=y_batch[0,:].cpu().detach().numpy()
+                        ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(1e-05*pow(10,i))+')', color='blue')    
+                        Rhat = y_hat.cpu().detach().numpy()[0, :]
+                        yerr = (yvar.cpu().detach().numpy()[0, :]-Rhat)
 
-                    fig, ax = plt.subplots( 5,2, figsize=(16,15) )
-                    for x_batch, y_batch in testloader_two:
-                        y_batch = y_batch.float().to(device)
-                        x_batch = x_batch.float().to(device)
-                        # tt = torch.zeros(x_batch.size(0), 1)+(alpha/2)
-                        # # print(x_batch.shape, tau.shape)
-                        # x_batch_up = torch.cat((x_batch, (tt)), 1)
-                        # print(x_batch.shape, tau.shape)
-                        # x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-03)
-                        # print(y_hat.shape,y_batch.shape)
-                        for i in range(5):
-                            x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-05*pow(10,i))
-                            ## PLOT THINGS ABOUT THE R
-                            curve=y_batch[j,:].cpu().detach().numpy()
-                            ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(1e-05*pow(10,i))+')', color='blue')    
-                            Rhat = y_hat.cpu().detach().numpy()[j, :]
-                            yerr = (yvar.cpu().detach().numpy()[j, :]-Rhat)
-                            fill_up = Rhat+yerr
-                            fill_down = Rhat-yerr
-                            fill_down[fill_down<0]= 0
-                            ax[i][0].fill_between(omega_fine.reshape([-1]), fill_up, fill_down, alpha=1, color='orange')
-                            # ax[i][0].errorbar(omega_fine.reshape([-1]), Rhat, yerr=yerr, fmt='x', linewidth=0.1, ms = 0.2, label='Rhat', color='orange')
-                            ax[i][0].set_xlim([0,400])
-                            # ax[i][0].set_ylim([1e-10,1e-02])
-                            ax[i][0].legend(loc='upper right')
-                            ## PLOT THINGS ABOUT THE E
-                            curve=x_batch[j,:].cpu().detach().numpy()
-                            ax[i][1].plot( (tau).reshape([-1]), curve, label='E', color='blue')    
-                            Ehat = x_hat.cpu().detach().numpy()[j, :]
-                            yerr = abs(Ehat-xvar.cpu().detach().numpy()[j, :])
-                            # fill_up = Ehat+yerr
-                            # fill_down = Ehat-yerr
-                            # fill_down[fill_down<0]= 0
-                            # ax[i][1].fill_between(tau.reshape([-1]), fill_up, fill_down, alpha=1, color='orange')
-                            ax[i][1].errorbar(tau.reshape([-1]), Ehat, yerr=yerr, fmt='x', linewidth=2, ms = 1, label='Ehat', color='orange')
-                            ax[i][1].set_yscale('log')
-                            ax[i][0].set_xlabel('$ \\omega (MeV)$')
-                            ax[i][1].set_xlabel('$ \\tau (MeV^{-1})$')
-                            ax[i][0].set_ylabel('$ R(\\omega)(MeV^{-1})$')
-                            ax[i][1].set_ylabel('$ E(\\tau)$')
-                            ax[i][1].legend(loc='upper right')
-                                
-                        fig.tight_layout()
-                        plt.savefig("sample_01/Rhat_Two_"+str(epoch)+'_'+str(j)+".png", dpi=300)
-                        torch.save(self.state_dict(), 'one_two')
-                        plt.close()
-                        break
-                    
+                        fill_up = Rhat+yerr
+                        fill_down = Rhat-yerr
+                        fill_down[fill_down<0]= 0
+
+                        ax[i][0].fill_between(omega_fine.reshape([-1]), fill_up, fill_down, alpha=1, color='orange')
+                        # ax[i][0].errorbar(omega_fine.reshape([-1]), Rhat, yerr=yerr, fmt='x', linewidth=0.1, ms = 0.2, label='Rhat', color='orange')
+                        ax[i][0].set_xlim([0,500])
+                        # ax[i][0].set_ylim([1e-10,1e-02])
+                        ax[i][0].legend(loc='upper right')
 
 
+                        ## PLOT THINGS ABOUT THE E
+                        curve=x_batch[0,:].cpu().detach().numpy()
+                        ax[i][1].plot( (tau).reshape([-1]), curve, label='E', color='blue')    
+                        Ehat = x_hat.cpu().detach().numpy()[0, :]
+                        yerr = abs(Ehat-xvar.cpu().detach().numpy()[0, :])
+                        # fill_up = Ehat+yerr
+                        # fill_down = Ehat-yerr
+                        # fill_down[fill_down<0]= 0
+                        # ax[i][1].fill_between(tau.reshape([-1]), fill_up, fill_down, alpha=1, color='orange')
+                        ax[i][1].errorbar(tau.reshape([-1]), Ehat, yerr=yerr, fmt='x', linewidth=2, ms = 1, label='Ehat', color='orange')
+                        ax[i][1].set_yscale('log')
+                        ax[i][1].legend(loc='upper right')
+                    break        
+                fig.tight_layout()
+                plt.savefig("sample_04/Rhat_One_"+str(epoch)+".png", dpi=300)
+                plt.close()
+
+
+
+
+
+                fig, ax = plt.subplots( 5,2, figsize=(12, 16) )
+                for x_batch, y_batch in testloader_two:
+                    y_batch = y_batch.float().to(device)
+                    x_batch = x_batch.float().to(device)
+                
+                    # tt = torch.zeros(x_batch.size(0), 1)+(alpha/2)
+                    # # print(x_batch.shape, tau.shape)
+                    # x_batch_up = torch.cat((x_batch, (tt)), 1)
+                    # print(x_batch.shape, tau.shape)
+                    # x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-03)
+                    # print(y_hat.shape,y_batch.shape)
+
+                    for i in range(5):
+                        x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-05*pow(10,i))
+                        ## PLOT THINGS ABOUT THE R
+                        curve=y_batch[0,:].cpu().detach().numpy()
+                        ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(1e-05*pow(10,i))+')', color='blue')    
+                        Rhat = y_hat.cpu().detach().numpy()[0, :]
+                        yerr = (yvar.cpu().detach().numpy()[0, :]-Rhat)
+                        fill_up = Rhat+yerr
+                        fill_down = Rhat-yerr
+                        fill_down[fill_down<0]= 0
+                        ax[i][0].fill_between(omega_fine.reshape([-1]), fill_up, fill_down, alpha=1, color='orange')
+                        # ax[i][0].errorbar(omega_fine.reshape([-1]), Rhat, yerr=yerr, fmt='x', linewidth=0.1, ms = 0.2, label='Rhat', color='orange')
+                        ax[i][0].set_xlim([0,500])
+                        # ax[i][0].set_ylim([1e-10,1e-02])
+                        ax[i][0].legend(loc='upper right')
+
+
+                        ## PLOT THINGS ABOUT THE E
+                        curve=x_batch[0,:].cpu().detach().numpy()
+                        ax[i][1].plot( (tau).reshape([-1]), curve, label='E', color='blue')    
+                        Ehat = x_hat.cpu().detach().numpy()[0, :]
+                        yerr = abs(Ehat-xvar.cpu().detach().numpy()[0, :])
+                        # fill_up = Ehat+yerr
+                        # fill_down = Ehat-yerr
+                        # fill_down[fill_down<0]= 0
+                        # ax[i][1].fill_between(tau.reshape([-1]), fill_up, fill_down, alpha=1, color='orange')
+                        ax[i][1].errorbar(tau.reshape([-1]), Ehat, yerr=yerr, fmt='x', linewidth=2, ms = 1, label='Ehat', color='orange')
+                        ax[i][1].set_yscale('log')
+                        ax[i][1].legend(loc='upper right')
+                    break        
+                fig.tight_layout()
+                plt.savefig("sample_04/Rhat_Two_"+str(epoch)+".png", dpi=300)
+                torch.save(self.state_dict(), 'one_two')
+                plt.close()
+                
                 ### Final Numbers 
                 Ent_list_one =[]
                 chi2_one=[]
                 Ent_list_two =[]
                 chi2_two=[]
+
                 for x_batch, y_batch in testloader_one:
                     y_batch = y_batch.float().to(device)
                     x_batch = x_batch.float().to(device)
@@ -382,10 +380,12 @@ class Network(nn.Module):
                     my_list = Entropy(y_batch.cpu().detach().numpy(), y_hat.cpu().detach().numpy(), 1 )
                     [Ent_list_one.append(item) for item in my_list]
                     # np.append(Ent_list_one, Entropy(y_batch.cpu().detach().numpy(), y_hat.cpu().detach().numpy(), 1 ).reshape([-1,1]), axis = 0)
+                    
                     # Calculate Chi_squared
                     my_list = chi2_vec(x_batch.cpu().detach().numpy(), x_hat.cpu().detach().numpy(), 1e-04)
                     [chi2_one.append(item) for item in my_list]
                     # np.append( chi2_one, chi2_vec(x_batch.cpu().detach().numpy(), x_hat.cpu().detach().numpy(), 1e-04).reshape([-1,1]), axis = 0)
+
                 for x_batch, y_batch in testloader_two:
                     y_batch = y_batch.float().to(device)
                     x_batch = x_batch.float().to(device)
@@ -394,10 +394,12 @@ class Network(nn.Module):
                     my_list = Entropy(y_batch.cpu().detach().numpy(), y_hat.cpu().detach().numpy(), 1 )
                     [Ent_list_two.append(item) for item in my_list]
                     # np.append(Ent_list_one, Entropy(y_batch.cpu().detach().numpy(), y_hat.cpu().detach().numpy(), 1 ).reshape([-1,1]), axis = 0)
+                    
                     # Calculate Chi_squared
                     my_list = chi2_vec(x_batch.cpu().detach().numpy(), x_hat.cpu().detach().numpy(), 1e-04)
                     [chi2_two.append(item) for item in my_list]
-                print("\n #######################ENTROPIES#################################")
+
+                print("#######################ENTROPIES#################################")
                 # print("Entropy shapes", len(Ent_list_one), len(Ent_list_two) )
                 Ent_list_two=np.array(Ent_list_two)
                 Ent_list_one=np.array(Ent_list_one)
@@ -407,6 +409,7 @@ class Network(nn.Module):
                 print("Max", np.max(Ent_list_one) )
                 print("Mean", Ent_list_one.mean())
                 print("std", Ent_list_one.std())
+
                 print("TWO PEAK")
                 print("Min", np.min(Ent_list_two) )
                 print("Median", np.median(Ent_list_two) )
@@ -439,10 +442,11 @@ class Network(nn.Module):
 ## Theta
 x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
 
-
+print(x.keys())
 tau = x['tau']
 omega_fine=x['omega_fine']
 omega=x['omega']
+
 R = np.concatenate([x['One_Peak_R_interp'], x['Two_Peak_R_interp']], axis=0)
 E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
 print(E.shape, R.shape)
@@ -451,21 +455,18 @@ Kern = Kern.astype('float64')
 Kern_R[:, (Kern_R.shape[1]-1)] = 1
 print(torch.cuda.is_available())
 torch.pi = torch.acos(torch.zeros(1)).item() 
-
+# print("I moved the model to device")
 x = torch.from_numpy(E)
 y = torch.from_numpy(R)
 trainset = MyDataset(x, y)
 trainloader = DataLoader(trainset, batch_size=128, shuffle=True)
 
-
 ## ThetaGPU
 # P = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/Test_MEM_data.p')
-
 ## JLSE
 P = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/Test_MEM_data.p')
 
 
-# The test data (one peak)
 R_test_1 = np.concatenate([  P['Two_Peak_R']], axis=0)
 E_test_1 = np.concatenate([  P['Two_Peak_E']], axis=0)
 print(E_test_1.shape, R_test_1.shape)
@@ -474,8 +475,6 @@ R_test_1 = torch.from_numpy(R_test_1)
 testset_two = MyDataset(E_test_1, R_test_1)
 testloader_two = DataLoader(testset_two, batch_size=128, shuffle=False)
 
-
-# The test data (two peak)
 R_test_2 = np.concatenate([  P['One_Peak_R']], axis=0)
 E_test_2 = np.concatenate([ P['One_Peak_E']], axis=0)
 print(E_test_2.shape, R_test_2.shape)
@@ -484,16 +483,17 @@ R_test_2 = torch.from_numpy(R_test_2)
 testset_one = MyDataset(E_test_2, R_test_2)
 testloader_one = DataLoader(testset_one, batch_size=128, shuffle=False)
 
-## The device
+## The full data is not going to the gpu now.
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("Everything is defined now")
 rbfnet = Network(Kern, Kern_R, k=20)
 
-## The actual model
-rbfnet.load_state_dict(torch.load('modella_converged_5'))
+
+print("I am using modella")
+rbfnet.load_state_dict(torch.load('modella'))
 rbfnet.to(device)
-rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, 120, 128, 0.001)
-torch.save(rbfnet.state_dict(), 'modella_converged_6')
+rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, 200, 128, 0.0001)
+torch.save(rbfnet.state_dict(), 'modella_converged')
 
 
 
