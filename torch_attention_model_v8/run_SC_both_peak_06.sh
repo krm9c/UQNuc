@@ -1,6 +1,10 @@
 #!/bin/bash
 ##!/bin/bash
 
+############################################################
+## THIS IS THE SCRIPT WITH NOISE AND THE VARIANCE CORRECTION.
+############################################################
+
 # ## The following is for running on theta gpu
 # export http_proxy=http://proxy.tmi.alcf.anl.gov:3128
 # export https_proxy=http://proxy.tmi.alcf.anl.gov:3128
@@ -20,6 +24,7 @@
 # unset __conda_setup
 # # <<< conda initialize <<<
 # conda activate torchRL
+
 
 ## The following is for running on JLSE
 source ~/miniconda3/etc/profile.d/conda.sh

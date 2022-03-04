@@ -158,8 +158,6 @@ class Network(nn.Module):
     def forward(self, x, sigma):
         x = x.float()
         self.U=self.U.double().to(device)
-
-
         select=self.selector(x).double().to(device)
         Rhat = torch.exp(torch.matmul(select, self.U.transpose(0,1))) 
         # Normalize E
@@ -170,27 +168,14 @@ class Network(nn.Module):
         multout = torch.matmul(self.kern, Rhat.transpose(0, 1))
         Ehat = multout.transpose(0, 1)
 
-        x_batch_N = (x+sigma*torch.rand(x.size()).to(device))
-        select_N=self.selector(x_batch_N).double().to(device)
-        Rhat_N = torch.exp(torch.matmul(select_N, self.U.transpose(0,1))) 
-        # Normalize E
-        ####################################################################################
-        Ehat_N = torch.matmul(self.kern, Rhat_N.transpose(0, 1)).transpose(0, 1)
-        correction_term = Ehat_N[:, 0].view(-1, 1).repeat(1, 2000)
-        Rhat_N = torch.div(Rhat_N, correction_term)
-        multout_N = torch.matmul(self.kern, Rhat.transpose(0, 1))
-        Ehat_N = multout_N.transpose(0, 1)
-
-
-        return Ehat, Rhat, Ehat_N, Rhat_N, x_batch_N
+        return Ehat, Rhat, Ehat, Rhat, x
 
     ####################################################################################
     def loss_func(self, Ehat, ENhat, Rhat,  E, EN, R, fac):
         # The R loss
         non_integrated_entropy = (Rhat-R-torch.mul(Rhat, torch.log(torch.div(Rhat, R))))
         loss_R = -torch.mean(non_integrated_entropy)
-        loss_E = torch.mean( torch.mul((Ehat   -E).pow(2), (1/(0.0001*0.0001))))\
-               + torch.mean( torch.mul((EN -ENhat).pow(2), (1/(fac[2]*fac[2]))) ) 
+        loss_E = torch.mean( torch.mul((Ehat   -E).pow(2), (1/(0.0001*0.0001)))) 
         return (fac[0]*loss_R+fac[1]*loss_E), loss_E, loss_R
 
     ####################################################################################
@@ -211,10 +196,6 @@ class Network(nn.Module):
             current_loss_R = 0
             batches = 0
             progress = 0
-            factor_R=  1
-            factor_E = 1
-            fac_var=1e-03
-
             ####################################################################################
             if epoch < int(round(epochs*0.2)):
                 factor_R=  1e6
@@ -224,27 +205,27 @@ class Network(nn.Module):
                 factor_R=  1e5
                 factor_E = 1e-5
                 fac_var=1e-4
-                scheduler.step()
+                #scheduler.step()
             elif epoch < int(round(epochs*0.3)):
                 factor_R=  1e4
                 factor_E = 1e-4
                 fac_var=1e-3
-                scheduler.step()
+                #scheduler.step()
             elif epoch < int(round(epochs*0.4)):
                 factor_R= 1e3
                 factor_E= 1e-3
                 fac_var=1e-2
-                scheduler.step()
+                #scheduler.step()
             elif epoch < int(round(epochs*0.5)):
                 factor_R= 1e3
                 factor_E= 1e-3
                 fac_var=1e-2
-                scheduler.step()
+                #scheduler.step()
             else:
                 factor_R=1e1
                 factor_E=1e-1
                 fac_var=1
-                scheduler.step()
+                #scheduler.step()
 
             ####################################################################################
             for x_batch, y_batch in trainloader:
@@ -319,7 +300,7 @@ class Network(nn.Module):
                             ax[i][0].set_ylabel('$ R(\\omega)(MeV^{-1})$')
                             ax[i][1].set_ylabel('$ E(\\tau)$')
                         fig.tight_layout()
-                        plt.savefig("sample_01/Rhat_One_"+str(epoch)+'_'+str(j)+".png", dpi=300)
+                        plt.savefig("sample_01/Rhat_One_wonoise_"+str(epoch)+'_'+str(j)+".png", dpi=300)
                         plt.close()
                         break
 
@@ -366,13 +347,11 @@ class Network(nn.Module):
                             ax[i][1].legend(loc='upper right')
                                 
                         fig.tight_layout()
-                        plt.savefig("sample_01/Rhat_Two_"+str(epoch)+'_'+str(j)+".png", dpi=300)
+                        plt.savefig("sample_01/Rhat_Two_wonoise_"+str(epoch)+'_'+str(j)+".png", dpi=300)
                         torch.save(self.state_dict(), 'one_two')
                         plt.close()
                         break
                     
-
-
                 ### Final Numbers 
                 Ent_list_one =[]
                 chi2_one=[]
@@ -401,6 +380,7 @@ class Network(nn.Module):
                     # Calculate Chi_squared
                     my_list = chi2_vec(x_batch.cpu().detach().numpy(), x_hat.cpu().detach().numpy(), 1e-04)
                     [chi2_two.append(item) for item in my_list]
+
                 print("\n #######################ENTROPIES#################################")
                 # print("Entropy shapes", len(Ent_list_one), len(Ent_list_two) )
                 Ent_list_two=np.array(Ent_list_two)
@@ -440,6 +420,7 @@ class Network(nn.Module):
 
 ## JLSE
 # x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
+
 ## Theta
 x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
 
@@ -497,7 +478,7 @@ rbfnet = Network(Kern, Kern_R, k=20)
 # rbfnet.load_state_dict(torch.load('modella_converged_5'))
 rbfnet.to(device)
 rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, 200, 128, 0.001)
-torch.save(rbfnet.state_dict(), 'modella_converged_1')
+torch.save(rbfnet.state_dict(), 'modella_converged')
 
 
 
