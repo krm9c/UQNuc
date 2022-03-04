@@ -1,0 +1,16 @@
+{
+    "print_it": 1,
+    "mult_factor": 1,
+    "batch_size": 100,
+    "nw_output": 2000,
+    "learning_rate": 0.00001,
+    "input_flag": false,
+    "output_flag": true,
+    "learning_Step": 1000,
+    "factor_R": 1e7,
+    "factor_E": 1,
+    "factor_uq": 1e6,
+    "factor_entropy": 1e07,
+    "grad": false,
+    "grad_print": false
+}
