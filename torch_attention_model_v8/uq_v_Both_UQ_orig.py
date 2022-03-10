@@ -138,7 +138,7 @@ class Network_selector(nn.Module):
     ##########################################
     def forward(self, x):
         x = x.float()
-        return self.l2(torch.nn.Sigmoid()(self.l1(x)))
+        return self.l3(self.l2(torch.nn.relu()(self.l1(x))))
 
 
 class Network(nn.Module):
