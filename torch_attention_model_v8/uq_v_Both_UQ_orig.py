@@ -138,7 +138,10 @@ class Network_selector(nn.Module):
     ##########################################
     def forward(self, x):
         x = x.float()
-        return self.l3(self.l2(torch.nn.relu()(self.l1(x))))
+        x = torch.nn.Tanh()(self.l1(x))
+        identity = x
+        x = self.l3(torch.nn.Tanh()(self.l2(x)) + identity)
+        return x
 
 
 class Network(nn.Module):
@@ -196,35 +199,33 @@ class Network(nn.Module):
             current_loss_R = 0
             batches = 0
             progress = 0
-            factor_R=  1e7
-            factor_E = 1
-            fac_var=1e-4
+            
 
-            # ####################################################################################
-            # if epoch < int(round(epochs*0.2)):
-            #     factor_R=  1e3
-            #     factor_E = 1e-3
-            #     fac_var=1e-4
-            # elif epoch < int(round(epochs*0.25)):
-            #     factor_R=  1e2
-            #     factor_E = 1e-2
-            #     fac_var=1e-4
-            # elif epoch < int(round(epochs*0.3)):
-            #     factor_R=  1
-            #     factor_E = 1
-            #     fac_var=1e-4
-            # elif epoch < int(round(epochs*0.4)):
-            #     factor_R= 1e3
-            #     factor_E= 1e-3
-            #     fac_var=1e-4
-            # elif epoch < int(round(epochs*0.5)):
-            #     factor_R= 1e3
-            #     factor_E= 1e-3
-            #     fac_var=1e-4
-            # else:
-            #     factor_R=1
-            #     factor_E=1
-            #     fac_var=1e-4
+            ####################################################################################
+            if epoch < int(round(epochs*0.2)):
+                factor_R=  1e7
+                factor_E = 1e-7
+                fac_var=1e-4
+            elif epoch < int(round(epochs*0.25)):
+                factor_R=  1e7
+                factor_E = 1e-6
+                fac_var=1e-4
+            elif epoch < int(round(epochs*0.3)):
+                factor_R=  1e7
+                factor_E = 1e-5
+                fac_var=1e-4
+            elif epoch < int(round(epochs*0.4)):
+                factor_R= 1e7
+                factor_E= 1e-3
+                fac_var=1e-4
+            elif epoch < int(round(epochs*0.5)):
+                factor_R= 1e7
+                factor_E= 1e-3
+                fac_var=1e-4
+            else:
+                factor_R=  1e7
+                factor_E = 1
+                fac_var=1e-4
             
             if epoch%5 == 0:
                 scheduler.step()
@@ -432,16 +433,14 @@ class Network(nn.Module):
                         torch.save(self.state_dict(), 'one_two')
                         plt.close()
                         break
-                    
-
         return self
 
 
 ## JLSE
-# x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
+x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
 
 ## Theta
-x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
+# x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
 
 tau = x['tau']
 omega_fine=x['omega_fine']
@@ -512,11 +511,10 @@ testloader_two = DataLoader(testset_two, batch_size=128, shuffle=False)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("Everything is defined now")
 rbfnet = Network(Kern, Kern_R, k=20)
-
 ## The actual model
 rbfnet.load_state_dict(torch.load('results/models/modella_without_uncert'))
 rbfnet.to(device)
-rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, 100, 128, 0.000001)
+rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, 200, 128, 0.0001)
 torch.save(rbfnet.state_dict(), 'results/models/modella_without_uncert')
 
 
