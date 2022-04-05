@@ -140,8 +140,9 @@ class Network_selector(nn.Module):
         x = x.float()
         x = torch.nn.Tanh()(self.l1(x))
         identity = x
-        x = self.l3(torch.nn.Tanh()(self.l2(x)) + identity)
-        return x
+        x = torch.nn.Tanh()(self.l2(x)) + identity
+        skip =x
+        return self.l3(x)+skip
 
 
 class Network(nn.Module):
@@ -150,12 +151,8 @@ class Network(nn.Module):
         self.selector = Network_selector(k=k).to(device)
         self.kern=torch.from_numpy(kern).to(device)
         _, _, vh  = torch.svd(self.kern)
-        # vh = torch.unsqueeze(vh, 0)
         self.U=vh
-        # print("shapes U", self.U.shape, vh.shape)
-        # self.U= torch.cat([vh for i in range(128)], dim=0)   
         self.kern_R=torch.from_numpy(kern_R).to(device)
-        # self.inverter=torch.from_numpy(self.U)
 
     ##########################################
     def forward(self, x, sigma):
@@ -261,7 +258,8 @@ class Network(nn.Module):
             ####################################################################################
             # Printing and saving code 
             if epoch % 1 ==0:
-                torch.save(self.state_dict(), 'results/models/modella_without_uncert')
+
+                torch.save(self.state_dict(), 'results/models/modella_orig')
 
                 ### Final Numbers 
                 Ent_list_one =[]
@@ -356,7 +354,7 @@ class Network(nn.Module):
                             curve=y_batch[j,:].cpu().detach().numpy()
                             ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(1e-4*pow(1,i))+')', color='blue')    
                             Rhat = y_hat.cpu().detach().numpy()[j, :]
-                            yerr = 0*(yvar.cpu().detach().numpy()[j, :]-Rhat)
+                            yerr = (yvar.cpu().detach().numpy()[j, :]-Rhat)
                             fill_up = Rhat+yerr
                             fill_down = Rhat-yerr
                             fill_down[fill_down<0]= 0
@@ -436,12 +434,11 @@ class Network(nn.Module):
         return self
 
 
+## theta
+# x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
+
 ## JLSE
-x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
-
-## Theta
-# x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
-
+x = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/inverse_data_interpolated_numpy.p')
 tau = x['tau']
 omega_fine=x['omega_fine']
 omega=x['omega']
@@ -460,24 +457,24 @@ trainset = MyDataset(xx, yy)
 trainloader = DataLoader(trainset, batch_size=128, shuffle=True)
 
 
-# The test data (one peak)
-R_test_1 =  np.concatenate( [ x['One_Peak_R_interp'][0:1000,:] ], axis=0)
-E_test_1, R_test_1, _, _ = integrate(tau, omega, omega_fine, R_test_1)
-print(E_test_1.shape, R_test_1.shape)
-E_test_1 = torch.from_numpy(E_test_1)
-R_test_1 = torch.from_numpy(R_test_1)
-testset_one = MyDataset(E_test_1, R_test_1)
-testloader_one = DataLoader(testset_one, batch_size=128, shuffle=False)
+# # The test data (one peak)
+# R_test_1 =  np.concatenate( [ x['One_Peak_R_interp'][0:1000,:] ], axis=0)
+# E_test_1, R_test_1, _, _ = integrate(tau, omega, omega_fine, R_test_1)
+# print(E_test_1.shape, R_test_1.shape)
+# E_test_1 = torch.from_numpy(E_test_1)
+# R_test_1 = torch.from_numpy(R_test_1)
+# testset_one = MyDataset(E_test_1, R_test_1)
+# testloader_one = DataLoader(testset_one, batch_size=128, shuffle=False)
 
 
-# The test data (two peak)
-R_test_2 = np.concatenate([ x['Two_Peak_R_interp'][0:1000,:] ], axis=0)
-E_test_2, R_test_2, _, _ = integrate(tau, omega, omega_fine, R_test_2)
-print(E_test_2.shape, R_test_2.shape)
-E_test_2 = torch.from_numpy(E_test_2)
-R_test_2 = torch.from_numpy(R_test_2)
-testset_two = MyDataset(E_test_2, R_test_2)
-testloader_two = DataLoader(testset_two, batch_size=128, shuffle=False)
+# # The test data (two peak)
+# R_test_2 = np.concatenate([ x['Two_Peak_R_interp'][0:1000,:] ], axis=0)
+# E_test_2, R_test_2, _, _ = integrate(tau, omega, omega_fine, R_test_2)
+# print(E_test_2.shape, R_test_2.shape)
+# E_test_2 = torch.from_numpy(E_test_2)
+# R_test_2 = torch.from_numpy(R_test_2)
+# testset_two = MyDataset(E_test_2, R_test_2)
+# testloader_two = DataLoader(testset_two, batch_size=128, shuffle=False)
 
 
 
@@ -485,37 +482,37 @@ testloader_two = DataLoader(testset_two, batch_size=128, shuffle=False)
 # # P = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/Test_MEM_data.p')
 
 ## JLSE
-# P = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/Test_MEM_data.p')
+P = return_dict('/gpfs/jlse-fs0/users/kraghavan/Inverse/Test_MEM_data.p')
 
 
-# # The test data (one peak)
-# R_test_1 = np.concatenate([  P['Two_Peak_R']], axis=0)
-# E_test_1 = np.concatenate([  P['Two_Peak_E']], axis=0)
-# print(E_test_1.shape, R_test_1.shape)
-# E_test_1 = torch.from_numpy(E_test_1)
-# R_test_1 = torch.from_numpy(R_test_1)
-# testset_two = MyDataset(E_test_1, R_test_1)
-# testloader_two = DataLoader(testset_two, batch_size=128, shuffle=False)
+# The test data (one peak)
+R_test_1 = np.concatenate([  P['Two_Peak_R']], axis=0)
+E_test_1 = np.concatenate([  P['Two_Peak_E']], axis=0)
+print(E_test_1.shape, R_test_1.shape)
+E_test_1 = torch.from_numpy(E_test_1)
+R_test_1 = torch.from_numpy(R_test_1)
+testset_two = MyDataset(E_test_1, R_test_1)
+testloader_two = DataLoader(testset_two, batch_size=128, shuffle=False)
 
 
-# # The test data (two peak)
-# R_test_2 = np.concatenate([  P['One_Peak_R']], axis=0)
-# E_test_2 = np.concatenate([ P['One_Peak_E']], axis=0)
-# print(E_test_2.shape, R_test_2.shape)
-# E_test_2 = torch.from_numpy(E_test_2)
-# R_test_2 = torch.from_numpy(R_test_2)
-# testset_one = MyDataset(E_test_2, R_test_2)
-# testloader_one = DataLoader(testset_one, batch_size=128, shuffle=False)
+# The test data (two peak)
+R_test_2 = np.concatenate([  P['One_Peak_R']], axis=0)
+E_test_2 = np.concatenate([ P['One_Peak_E']], axis=0)
+print(E_test_2.shape, R_test_2.shape)
+E_test_2 = torch.from_numpy(E_test_2)
+R_test_2 = torch.from_numpy(R_test_2)
+testset_one = MyDataset(E_test_2, R_test_2)
+testloader_one = DataLoader(testset_one, batch_size=128, shuffle=False)
 
 ## The device
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("Everything is defined now")
 rbfnet = Network(Kern, Kern_R, k=20)
 ## The actual model
-rbfnet.load_state_dict(torch.load('results/models/modella_without_uncert'))
+# rbfnet.load_state_dict(torch.load('results/models/modella_without_uncert'))
 rbfnet.to(device)
 rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, 200, 128, 0.0001)
-torch.save(rbfnet.state_dict(), 'results/models/modella_without_uncert')
+torch.save(rbfnet.state_dict(), 'results/models/modella_orig')
 
 
 

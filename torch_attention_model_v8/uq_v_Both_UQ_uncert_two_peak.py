@@ -127,8 +127,9 @@ def worst_five(x, n):
 
 
 
+
 class Network_selector(nn.Module):
-    def __init__(self, input_shape=151, k=2):
+    def __init__(self, input_shape=151):
         super(Network_selector, self).__init__()
         self.l1  =nn.Linear(in_features=151, out_features=151)
         self.l2  =nn.Linear(in_features=151, out_features=151)
@@ -137,11 +138,7 @@ class Network_selector(nn.Module):
     ##########################################
     def forward(self, x):
         x = x.float()
-        x = torch.nn.Tanh()(self.l1(x))
-        identity = x
-        x = torch.nn.Tanh()(self.l2(x)) + identity
-        skip =x
-        return self.l3(x)+skip
+        return self.l2(torch.nn.Sigmoid()(self.l1(x)))
 
 
 class Network(nn.Module):
@@ -166,11 +163,9 @@ class Network(nn.Module):
         Rhat = torch.div(Rhat, correction_term)
         Ehat = torch.matmul(self.kern, Rhat.transpose(0, 1)).transpose(0, 1)
 
-        # print("The value of sigma is", sigma)
         x_batch_N = (x+sigma*torch.rand(x.size()).to(device))
         select_N=self.selector(x).double().to(device)
         Rhat_N = torch.exp(torch.matmul(select_N, self.U.transpose(0,1))) 
-        
         # Normalize E
         ####################################################################################
         Ehat_N = torch.matmul(self.kern, Rhat_N.transpose(0, 1)).transpose(0, 1)
@@ -204,7 +199,7 @@ class Network(nn.Module):
             [Ent_list.append(item) for item in my_list]
             my_list = chi2_vec(x_batch.cpu().detach().numpy(), x_hat.cpu().detach().numpy(), 1e-04)
             [chi2.append(item) for item in my_list]
-        print("#######################ENTROPIES#################################")
+        print("\n #######################ENTROPIES#################################")
         # print("Entropy shapes", len(Ent_list_one), len(Ent_list_two) )
         Ent_list=np.array(Ent_list)
         Ent_list=np.array(Ent_list)
@@ -213,17 +208,20 @@ class Network(nn.Module):
         print("Max", np.max(Ent_list) )
         print("Mean", Ent_list.mean())
         print("std", Ent_list.std())
-        print("#######################Chi 2################################# \n")
+        print("########################################################")
+        print("\n #######################Chi 2################################# \n")
         chi2=np.array(chi2)
         print("Min", np.min(chi2) )
         print("Median", np.median(chi2) )
         print("Max", np.max(chi2) )
         print("Mean", chi2.mean())
         print("std", chi2.std())
+        print("########################################################")
         return Ent_list, chi2
 
 
-    def evaluate_plots(self, testloader, omega_fine, tau, epoch, save_dir, filee):
+
+    def evaluate_plots(self, testloader, omega_fine, tau, epoch, save_dir):
         import matplotlib.pyplot as plt
         import numpy 
         self.eval()
@@ -233,12 +231,12 @@ class Network(nn.Module):
                 y_batch = y_batch.float().to(device)
                 x_batch = x_batch.float().to(device)
                 for i in range(5):
-                    x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-4*pow(10,i))
+                    x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, 1e-4*pow(1,i))
                     ## PLOT THINGS ABOUT THE R
                     curve=y_batch[j,:].cpu().detach().numpy()
-                    ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(1e-4*pow(10,i))+')', color='blue')    
+                    ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(1e-4*pow(1,i))+')', color='blue')    
                     Rhat = y_hat.cpu().detach().numpy()[j, :]
-                    yerr = (Rhat-yvar.cpu().detach().numpy()[j, :])
+                    yerr = (yvar.cpu().detach().numpy()[j, :]-Rhat)
                     fill_up = Rhat+yerr
                     fill_down = Rhat-yerr
                     fill_down[fill_down<0]= 0
@@ -258,7 +256,7 @@ class Network(nn.Module):
                     ax[i][0].set_ylabel('$ R(\\omega)(MeV^{-1})$')
                     ax[i][1].set_ylabel('$ E(\\tau)$')
                 fig.tight_layout()
-                plt.savefig(save_dir+filee+str(epoch)+'_'+str(j)+".png", dpi=300)
+                plt.savefig(save_dir+"Rhat_One_wonoise_"+str(epoch)+'_'+str(j)+".png", dpi=300)
                 plt.close()
                 break
         return
@@ -271,7 +269,7 @@ class Network(nn.Module):
         LR = []
         LE = []
         optimiser = torch.optim.RMSprop(self.parameters(),\
-            lr=lr, weight_decay=0.0001)
+            lr=lr, weight_decay=0.00001)
         scheduler = torch.optim.lr_scheduler.ExponentialLR(optimiser, gamma=0.99)
         ####################################################################################
         epoch = 0
@@ -286,27 +284,27 @@ class Network(nn.Module):
             ####################################################################################
             if epoch < int(round(epochs*0.2)):
                 factor_R=  1e6
-                factor_E = 1e-4
-                fac_var=1e-04
+                factor_E = 1e-6
+                fac_var=1e-02
             elif epoch == int(round(epochs*0.25)):
                 factor_R=  1e6
-                factor_E = 1e-3
-                fac_var=1e-03
+                factor_E = 1e-5
+                fac_var=1e-3
                 scheduler.step()
             elif epoch == int(round(epochs*0.3)):
                 factor_R=  1e5
-                factor_E = 1e-2
-                fac_var=1e-02
+                factor_E = 1e-4
+                fac_var=1e-3
                 scheduler.step()
             elif epoch == int(round(epochs*0.4)):
                 factor_R= 1e5
-                factor_E= 1e-01
-                fac_var=1e-01
+                factor_E= 1e-3
+                fac_var=1e-2
                 scheduler.step()
             else:
                 factor_R=1e5
-                factor_E=1
-                fac_var=1
+                factor_E=1e-2
+                fac_var=1e-1
             
             ####################################################################################
             for x_batch, y_batch in trainloader:
@@ -340,34 +338,25 @@ class Network(nn.Module):
             if epoch % 1 ==0:
 
                 if flag==0:
-                    print("########################################################")
                     print("\n One Peak")
                     torch.save(self.state_dict(), model_name)
                     _,_=self.evaluate_METRICS(testloader_one, fac_var)
-                    self.evaluate_plots(testloader_one, omega, tau, epoch,\
-                         save_dir, filee='one_peak')
+                    self.evaluate_plots(testloader_one, omega, tau, epoch, save_dir)
                 elif flag==1:
-                    print("########################################################")
-                    print("\n Two Peak")
-                    torch.save(self.state_dict(), model_name)
-                    _,_=self.evaluate_METRICS(testloader_two, fac_var)
-                    self.evaluate_plots(testloader_two, omega, tau,\
-                         epoch, save_dir, filee='two_peak')
-                    print("########################################################")
-                else:
-                    print("########################################################")
-                    print("\n One Peak")
+                    print("Two Peak")
                     torch.save(self.state_dict(), model_name)
                     _,_=self.evaluate_METRICS(testloader_one, fac_var)
-                    self.evaluate_plots(testloader_one, omega, tau, epoch,\
-                         save_dir, filee='one_peak')
-                    print("########################################################")
+                    self.evaluate_plots(testloader_two, omega, tau, epoch, save_dir)
+                else:
+                    print("One Peak")
+                    torch.save(self.state_dict(), model_name)
+                    _,_=self.evaluate_METRICS(testloader_one, fac_var)
+                    self.evaluate_plots(testloader_one, omega, tau, epoch, save_dir)
                     print("Two Peak")
-                    _,_=self.evaluate_METRICS(testloader_two, fac_var)
-                    self.evaluate_plots(testloader_two, omega, tau, epoch,\
-                         save_dir, filee='two_peak')    
-                    print("########################################################")
+                    _,_=self.evaluate_METRICS(testloader_one, fac_var)
+                    self.evaluate_plots(testloader_two, omega, tau, epoch, save_dir)    
         return self
+
 
 
 
@@ -409,7 +398,7 @@ for runs in range(n_runs):
 
     ## The actual model
     load = 1
-    flag = 2
+    flag = 1
     batche =128
     epochs = 120
     learning_rate=0.001
@@ -487,4 +476,7 @@ for runs in range(n_runs):
         rbfnet.to(device)
         rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag)
 
-    torch.save(rbfnet.state_dict(), model_ref+str(runs))
+    torch.save(rbfnet.state_dict(), model_ref)
+
+
+
