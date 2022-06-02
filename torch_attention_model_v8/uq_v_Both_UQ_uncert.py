@@ -411,7 +411,7 @@ for runs in range(n_runs):
     load = 1
     flag = 2
     batche =128
-    epochs = 120
+    epochs = 500
     learning_rate=0.001
     if flag == 0:
         print("one peaks")

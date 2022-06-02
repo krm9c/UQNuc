@@ -581,7 +581,7 @@ class Network(nn.Module):
             loss_E = torch.mean( torch.mul((Ehat- E).pow(2), (1/(0.0001*0.0001))))
             return (fac[0]*loss_R+fac[1]* loss_E), loss_E, loss_R
 
-    def evaluate_METRICS(self, testloader, fac_var):
+    def evaluate_METRICS(self, testloader, fac_var, save_dir,  epoch, filee):
         self.eval()
         ### Final Numbers 
         Ent_list =[]
@@ -613,6 +613,87 @@ class Network(nn.Module):
         print("Max", np.max(chi2) )
         print("Mean", chi2.mean())
         print("std", chi2.std())
+
+        import matplotlib.pyplot as plt
+        import numpy 
+        self.eval()
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+
+        CB91_Blue = '#05e1e1'
+        CB91_Green = '#47DBCD'
+        CB91_Pink = '#F3A0F2'
+        CB91_Purple = '#9D2EC5'
+        CB91_Violet = '#661D98'
+        CB91_Amber = '#F5B14C'
+        color_list = ['#405952',
+        '#9C9B7A',
+        '#FFD393',
+        '#FF974F',
+        '#F54F29',
+        ]
+        CB91_Grad_BP = ['#2cbdfe', '#2fb9fc', '#33b4fa', '#36b0f8',
+                        '#3aacf6', '#3da8f4', '#41a3f2', '#449ff0',
+                        '#489bee', '#4b97ec', '#4f92ea', '#528ee8',
+                        '#568ae6', '#5986e4', '#5c81e2', '#607de0',
+                        '#6379de', '#6775dc', '#6a70da', '#6e6cd8',
+                        '#7168d7', '#7564d5', '#785fd3', '#7c5bd1',
+                        '#7f57cf', '#8353cd', '#864ecb', '#894ac9',
+                        '#8d46c7', '#9042c5', '#943dc3', '#9739c1',
+                        '#9b35bf', '#9e31bd', '#a22cbb', '#a528b9',
+                        '#a924b7', '#ac20b5', '#b01bb3', '#b317b1']
+
+        small = 18
+        med = 20
+        large = 22
+        plt.style.use('seaborn-white')
+        COLOR = 'dimgrey'
+        rc={'axes.titlesize': small,
+            'legend.fontsize': small,
+            'axes.labelsize': med,
+            'axes.titlesize': small,
+            'xtick.labelsize': small,
+            'ytick.labelsize': med,
+            'figure.titlesize': small, 
+            'font.family': "sans-serif",
+            'font.sans-serif': "Myriad Hebrew",
+            'text.color' : COLOR,
+            'axes.labelcolor' : COLOR,
+            'axes.axisbelow': False,
+            'axes.edgecolor': 'lightgrey',
+            'axes.facecolor': 'None',
+            'axes.grid': False,
+            'axes.labelcolor': 'dimgrey',
+            'axes.spines.right': False,
+            'axes.spines.bottom': False,
+            'axes.spines.left': False,
+            'axes.spines.top': False,
+            'figure.facecolor': 'white',
+            'lines.solid_capstyle': 'round',
+            'patch.edgecolor': 'w',
+            'patch.force_edgecolor': True,
+            'text.color': 'dimgrey',
+            'xtick.bottom': False,
+            'xtick.color': 'dimgrey',
+            'xtick.direction': 'out',
+            'xtick.top': False,
+            'ytick.color': 'dimgrey',
+            'ytick.direction': 'out',
+            'ytick.left': False,
+            'ytick.right': False}
+        plt.rcParams.update(rc)
+        plt.rc('text', usetex = False)
+        fig, ax = plt.subplots(3,1, figsize=(16,15) )
+        ax[0].hist( 1e-05*chi2, color=CB91_Blue, label='chi squared')    
+        ax[1].hist( -1e05*Ent_list, color=CB91_Green, label='Entropy')     
+        ax[2].hist( 1e-05*chi2-1e05*Ent_list, color=CB91_Purple, label='chi squared+Entropy')   
+        ax[0].legend(loc='upper right')
+        ax[1].legend(loc='upper right')
+        ax[2].legend(loc='upper right')
+        fig.suptitle('Histograms', fontsize=16)
+        fig.tight_layout()
+        plt.savefig(save_dir+filee+str(epoch)+'_hist.png', dpi=300)
+        plt.close()
         return Ent_list, chi2
 
 
@@ -689,15 +770,15 @@ class Network(nn.Module):
         plt.rcParams.update(rc)
         plt.rc('text', usetex = False)
         for j in range(5):
-            fig, ax = plt.subplots( 5,2, figsize=(16,15) )
+            fig, ax = plt.subplots( 4,2, figsize=(16,15) )
             for x_batch, y_batch in testloader:
                 y_batch = y_batch.float().to(device)
                 x_batch = x_batch.float().to(device)
-                for i in range(5):
-                    x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, fac*pow(10,i))
+                for i in range(4):
+                    x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, fac*pow(100,i))
                     ## PLOT THINGS ABOUT THE R
                     curve=y_batch[j,:].cpu().detach().numpy()
-                    ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(fac*pow(10,i))+')', color='blue')    
+                    ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(fac*pow(100,i))+')', color='blue')    
                     Rhat = y_hat.cpu().detach().numpy()[j, :]
                     yerr = abs(Rhat-yvar.cpu().detach().numpy()[j, :])
                     fill_up = Rhat+yerr
@@ -796,26 +877,25 @@ class Network(nn.Module):
                     print("########################################################")
                     print("\n One Peak")
                     torch.save(self.state_dict(), model_name)
-                    _,_=self.evaluate_METRICS(testloader_one, fac_var)
+                    _,_=self.evaluate_METRICS(testloader_one, fac_var, save_dir, epoch, filee='one_peak')
                     self.evaluate_plots(testloader_one, omega, tau, epoch,\
                          save_dir, filee='one_peak', fac=fac_var)
                 elif flag==1:
                     print("########################################################")
                     print("\n Two Peak")
                     torch.save(self.state_dict(), model_name)
-                    _,_=self.evaluate_METRICS(testloader_two, fac_var)
-                    self.evaluate_plots(testloader_two, omega, tau,\
-                         epoch, save_dir, filee='two_peak', fac=fac_var)
+                    _,_=self.evaluate_METRICS(testloader_two, fac_var, save_dir, epoch, filee='two_peak')
+                    self.evaluate_plots(testloader_two, omega, tau, epoch, save_dir, filee='two_peak', fac=fac_var)
                     print("########################################################")
                 else:
                     print("########################################################")
                     print("\n One Peak")
-                    _,_=self.evaluate_METRICS(testloader_one, fac_var)
+                    _,_=self.evaluate_METRICS(testloader_one, fac_var, save_dir, epoch, filee='one_peak')
                     self.evaluate_plots(testloader_one, omega, tau, epoch,\
                          save_dir, filee='one_peak', fac=fac_var)
                     print("########################################################")
                     print("Two Peak")
-                    _,_=self.evaluate_METRICS(testloader_two, fac_var)
+                    _,_=self.evaluate_METRICS(testloader_two, fac_var, save_dir, epoch, filee='two_peak')
                     self.evaluate_plots(testloader_two, omega, tau, epoch,\
                          save_dir, filee='two_peak', fac=fac_var)    
                     torch.save(self.state_dict(), model_name)

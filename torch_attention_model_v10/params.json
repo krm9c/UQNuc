@@ -1,0 +1,11 @@
+{
+"n_runs":1,
+"batche":128,
+"epochs":500,
+"learning_rate":1e-4,
+"n_points":5000,
+"sched_factor":10,
+"factor_R":1e5,
+"factor_E":1e-5,
+"fac_var": 1e-4
+}

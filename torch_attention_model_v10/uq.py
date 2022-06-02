@@ -60,7 +60,7 @@ parser.add_argument(
 if __name__ == '__main__':
     # Load the parameters from json file
     args = parser.parse_args()
-    json_path = os.path.join('../torch_attention_model_v9/params.json')
+    json_path = os.path.join('../torch_attention_model_v10/params.json')
     assert os.path.isfile(
         json_path), "No json configuration file found at {}".format(json_path)
     params = Params(json_path).dict
@@ -217,6 +217,7 @@ if __name__ == '__main__':
             if load==0:
                 rbfnet.load_state_dict(torch.load(model_ref))
             rbfnet.to(device)
-            rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag, params)
+            rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, epochs, batche,\
+                                 learning_rate, save_dir, model_ref, flag, params)
 
         torch.save(rbfnet.state_dict(), model_ref+str(runs))
