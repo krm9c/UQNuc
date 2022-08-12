@@ -508,6 +508,496 @@ def worst_five(x, n):
     return ranked[::-1][:n]
 
 
+#########################################################################
+# Get the older model work out properly
+# RBF Layer
+class RBF(nn.Module):
+    def __init__(self, in_features, out_features, basis_func):
+        super(RBF, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.centres = nn.Parameter(torch.Tensor(out_features, in_features))
+        self.sigmas = nn.Parameter(torch.Tensor(out_features))
+        self.basis_func = basis_func
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.normal_(self.centres, 0, 0.01)
+        nn.init.constant_(self.sigmas, 2)
+
+    def forward(self, input):
+        size = (input.size(0), self.out_features, self.in_features)
+        # print(size)
+        x = input.unsqueeze(1).expand(size)
+        # print(x.shape)
+        c = self.centres.unsqueeze(0).expand(size)
+        # print(c.shape)
+        distances = (x - c).pow(2).sum(-1).pow(0.5) * self.sigmas.unsqueeze(0)
+        return self.basis_func(distances)
+
+def gaussian(alpha):
+    phi = torch.exp(-1*alpha.pow(2))
+    return phi
+
+def linear(alpha):
+    phi = alpha
+    return phi
+
+def quadratic(alpha):
+    phi = alpha.pow(2)
+    return phi
+
+def inverse_quadratic(alpha):
+    phi = torch.ones_like(alpha) / (torch.ones_like(alpha) + alpha.pow(2))
+    return phi
+
+def multiquadric(alpha):
+    phi = (torch.ones_like(alpha) + alpha.pow(2)).pow(0.5)
+    return phi
+
+def inverse_multiquadric(alpha):
+    phi = torch.ones_like(
+        alpha) / (torch.ones_like(alpha) + alpha.pow(2)).pow(0.5)
+    return phi
+  
+def spline(alpha):
+    phi = (alpha.pow(2) * torch.log(alpha + torch.ones_like(alpha)))
+    return phi
+  
+def poisson_one(alpha):
+    phi = (alpha - torch.ones_like(alpha)) * torch.exp(-alpha)
+    return phi
+
+def poisson_two(alpha):
+    phi = ((alpha - 2*torch.ones_like(alpha)) / 2*torch.ones_like(alpha)) \
+        * alpha * torch.exp(-alpha)
+    return phi
+
+def matern32(alpha):
+    phi = (torch.ones_like(alpha) + 3**0.5*alpha)*torch.exp(-3**0.5*alpha)
+    return phi
+
+def matern52(alpha):
+    phi = (torch.ones_like(alpha) + 5**0.5*alpha + (5/3)
+           * alpha.pow(2))*torch.exp(-5**0.5*alpha)
+    return phi
+
+def basis_func_dict():
+    """
+    A helper function that returns a dictionary containing each RBF
+    """
+    bases = {'gaussian': gaussian,
+             'linear': linear,
+             'quadratic': quadratic,
+             'inverse quadratic': inverse_quadratic,
+             'multiquadric': multiquadric,
+             'inverse multiquadric': inverse_multiquadric,
+             'spline': spline,
+             'poisson one': poisson_one,
+             'poisson two': poisson_two,
+             'matern32': matern32,
+             'matern52': matern52}
+    return bases
+
+
+class NetworkPRC(nn.Module):
+    def __init__(self, kern, kern_R):
+        super(NetworkPRC, self).__init__()
+        self.rbf_layers = nn.ModuleList()
+        self.linear_layers = nn.ModuleList()
+        self.kern_R = torch.from_numpy(kern_R).to(device)
+        self.kern = torch.from_numpy(kern).float().to(device)
+        # for i in range(len(layer_widths) - 1):
+        #print(layer_widths[i], layer_centres[i])
+
+        layer_widths = [151, 200]
+        layer_centres = [2000]
+        basis_func = gaussian
+        samples = 256
+
+        i = 0
+        self.rbf_layers.append(
+            RBF(layer_widths[i], layer_widths[i+1], basis_func))
+        self.linear_layers.append(
+            nn.Linear(layer_widths[i+1], layer_centres[i]))
+        self.linear_layers.append(
+            nn.Linear(layer_centres[i], layer_centres[i]))
+
+    ##########################################
+    def forward(self, x, fac_var=0.001):
+        out = x.float()
+        ##########################################
+        # for i in range(len(self.rbf_layers)):
+        i = 0
+        out = self.rbf_layers[i](out)
+        out = torch.relu(self.linear_layers[i](out))
+        i = 1
+        out = torch.exp(self.linear_layers[i](out))
+        ##########################################
+        # We have convert this code to pytorch
+        # print(out.shape, self.kern.shape)
+        Ehat = torch.matmul(self.kern, out.transpose(0, 1)).transpose(0, 1)
+        # print("EHat", Ehat.shape)
+        correction_term = Ehat[:, 0].view(-1, 1).repeat(1, 2000)
+        ##########################################
+        # print(correction_term.shape, Ehat.shape, out.shape)
+        Rhat = torch.div(out, correction_term)
+        # print(out.shape, self.kern.shape)
+        ##########################################
+        multout = torch.matmul(self.kern, Rhat.transpose(0, 1))
+        # print("multout", multout.shape)
+        Ehat = multout.transpose(0, 1)
+        # print("multout", Ehat.shape)
+        return Ehat, Rhat, Ehat, Rhat, x
+
+    ####################################################################################
+    def loss_func(self, Ehat, ENhat, Rhat,  E, EN, R, fac):
+        if fac[2]>0:
+            # The R loss
+            non_integrated_entropy = (Rhat-R-torch.mul(Rhat, torch.log(torch.div(Rhat, R))))
+            loss_R = -torch.mean(non_integrated_entropy)
+            loss_E = torch.mean( torch.mul((Ehat- E).pow(2), (1/(0.0001*0.0001))))\
+                + torch.mean( torch.mul((EN- ENhat).pow(2), (1/(fac[2]*fac[2]))) ) 
+            return (fac[0]*loss_R+fac[1]* loss_E), loss_E, loss_R
+        else:
+            # The R loss
+            non_integrated_entropy = (Rhat-R-torch.mul(Rhat, torch.log(torch.div(Rhat, R))))
+            loss_R = -torch.mean(non_integrated_entropy)
+            loss_E = torch.mean( torch.mul((Ehat- E).pow(2), (1/(0.0001*0.0001))))
+            return (fac[0]*loss_R+fac[1]* loss_E), loss_E, loss_R
+
+    def evaluate_METRICS(self, testloader, fac_var, save_dir,  epoch, filee):
+        self.eval()
+        ### Final Numbers 
+        Ent_list =[]
+        chi2=[]
+        for x_batch, y_batch in testloader:
+            y_batch = y_batch.float().to(device)
+            x_batch = x_batch.float().to(device)
+            x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, fac_var)
+            # Calculate Entropy
+            my_list = Entropy(y_batch.cpu().detach().numpy(), y_hat.cpu().detach().numpy(), 1 )
+            [Ent_list.append(item) for item in my_list]
+            my_list = chi2_vec(x_batch.cpu().detach().numpy(), x_hat.cpu().detach().numpy(), 1e-04)
+            [chi2.append(item) for item in my_list]
+
+
+        print("#######################ENTROPIES#################################")
+        # print("Entropy shapes", len(Ent_list_one), len(Ent_list_two) )
+        Ent_list=np.array(Ent_list)
+        Ent_list=np.array(Ent_list)
+        print("Min", np.min(Ent_list) )
+        print("Median", np.median(Ent_list) )
+        print("Max", np.max(Ent_list) )
+        print("Mean", Ent_list.mean())
+        print("std", Ent_list.std())
+        print("#######################Chi 2################################# \n")
+        chi2=np.array(chi2)
+        print("Min", np.min(chi2) )
+        print("Median", np.median(chi2) )
+        print("Max", np.max(chi2) )
+        print("Mean", chi2.mean())
+        print("std", chi2.std())
+
+        import matplotlib.pyplot as plt
+        import numpy 
+        self.eval()
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+
+        CB91_Blue = '#05e1e1'
+        CB91_Green = '#47DBCD'
+        CB91_Pink = '#F3A0F2'
+        CB91_Purple = '#9D2EC5'
+        CB91_Violet = '#661D98'
+        CB91_Amber = '#F5B14C'
+        color_list = ['#405952',
+        '#9C9B7A',
+        '#FFD393',
+        '#FF974F',
+        '#F54F29',
+        ]
+        CB91_Grad_BP = ['#2cbdfe', '#2fb9fc', '#33b4fa', '#36b0f8',
+                        '#3aacf6', '#3da8f4', '#41a3f2', '#449ff0',
+                        '#489bee', '#4b97ec', '#4f92ea', '#528ee8',
+                        '#568ae6', '#5986e4', '#5c81e2', '#607de0',
+                        '#6379de', '#6775dc', '#6a70da', '#6e6cd8',
+                        '#7168d7', '#7564d5', '#785fd3', '#7c5bd1',
+                        '#7f57cf', '#8353cd', '#864ecb', '#894ac9',
+                        '#8d46c7', '#9042c5', '#943dc3', '#9739c1',
+                        '#9b35bf', '#9e31bd', '#a22cbb', '#a528b9',
+                        '#a924b7', '#ac20b5', '#b01bb3', '#b317b1']
+
+        small = 18
+        med = 20
+        large = 22
+        plt.style.use('seaborn-white')
+        COLOR = 'dimgrey'
+        rc={'axes.titlesize': small,
+            'legend.fontsize': small,
+            'axes.labelsize': med,
+            'axes.titlesize': small,
+            'xtick.labelsize': small,
+            'ytick.labelsize': med,
+            'figure.titlesize': small, 
+            'font.family': "sans-serif",
+            'font.sans-serif': "Myriad Hebrew",
+            'text.color' : COLOR,
+            'axes.labelcolor' : COLOR,
+            'axes.axisbelow': False,
+            'axes.edgecolor': 'lightgrey',
+            'axes.facecolor': 'None',
+            'axes.grid': False,
+            'axes.labelcolor': 'dimgrey',
+            'axes.spines.right': False,
+            'axes.spines.bottom': False,
+            'axes.spines.left': False,
+            'axes.spines.top': False,
+            'figure.facecolor': 'white',
+            'lines.solid_capstyle': 'round',
+            'patch.edgecolor': 'w',
+            'patch.force_edgecolor': True,
+            'text.color': 'dimgrey',
+            'xtick.bottom': False,
+            'xtick.color': 'dimgrey',
+            'xtick.direction': 'out',
+            'xtick.top': False,
+            'ytick.color': 'dimgrey',
+            'ytick.direction': 'out',
+            'ytick.left': False,
+            'ytick.right': False}
+        plt.rcParams.update(rc)
+        plt.rc('text', usetex = False)
+        fig, ax = plt.subplots(3,1, figsize=(16,15) )
+        ax[0].hist( 1e-05*chi2, color=CB91_Blue, label='chi squared')    
+        ax[1].hist( -1e05*Ent_list, color=CB91_Green, label='Entropy')     
+        ax[2].hist( 1e-05*chi2-1e05*Ent_list, color=CB91_Purple, label='chi squared+Entropy')   
+        ax[0].legend(loc='upper right')
+        ax[1].legend(loc='upper right')
+        ax[2].legend(loc='upper right')
+        fig.suptitle('Histograms', fontsize=16)
+        fig.tight_layout()
+        plt.savefig(save_dir+filee+str(epoch)+'_hist.png', dpi=300)
+        plt.close()
+        return Ent_list, chi2
+
+
+    def evaluate_plots(self, testloader, omega_fine, tau, epoch, save_dir, filee, fac):
+        import matplotlib.pyplot as plt
+        import numpy 
+        self.eval()
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+
+        CB91_Blue = '#05e1e1'
+        CB91_Green = '#47DBCD'
+        CB91_Pink = '#F3A0F2'
+        CB91_Purple = '#9D2EC5'
+        CB91_Violet = '#661D98'
+        CB91_Amber = '#F5B14C'
+        color_list = ['#405952',
+        '#9C9B7A',
+        '#FFD393',
+        '#FF974F',
+        '#F54F29',
+        ]
+        CB91_Grad_BP = ['#2cbdfe', '#2fb9fc', '#33b4fa', '#36b0f8',
+                        '#3aacf6', '#3da8f4', '#41a3f2', '#449ff0',
+                        '#489bee', '#4b97ec', '#4f92ea', '#528ee8',
+                        '#568ae6', '#5986e4', '#5c81e2', '#607de0',
+                        '#6379de', '#6775dc', '#6a70da', '#6e6cd8',
+                        '#7168d7', '#7564d5', '#785fd3', '#7c5bd1',
+                        '#7f57cf', '#8353cd', '#864ecb', '#894ac9',
+                        '#8d46c7', '#9042c5', '#943dc3', '#9739c1',
+                        '#9b35bf', '#9e31bd', '#a22cbb', '#a528b9',
+                        '#a924b7', '#ac20b5', '#b01bb3', '#b317b1']
+
+        small = 16
+        med = 18
+        large = 20
+
+
+        plt.style.use('seaborn-white')
+        COLOR = 'dimgrey'
+        rc={'axes.titlesize': small,
+            'legend.fontsize': small,
+            'axes.labelsize': med,
+            'axes.titlesize': small,
+            'xtick.labelsize': small,
+            'ytick.labelsize': med,
+            'figure.titlesize': small, 
+            'font.family': "sans-serif",
+            'font.sans-serif': "Myriad Hebrew",
+            'text.color' : COLOR,
+            'axes.labelcolor' : COLOR,
+            'axes.axisbelow': False,
+            'axes.edgecolor': 'lightgrey',
+            'axes.facecolor': 'None',
+            'axes.grid': False,
+            'axes.labelcolor': 'dimgrey',
+            'axes.spines.right': False,
+            'axes.spines.bottom': False,
+            'axes.spines.left': False,
+            'axes.spines.top': False,
+            'figure.facecolor': 'white',
+            'lines.solid_capstyle': 'round',
+            'patch.edgecolor': 'w',
+            'patch.force_edgecolor': True,
+            'text.color': 'dimgrey',
+            'xtick.bottom': False,
+            'xtick.color': 'dimgrey',
+            'xtick.direction': 'out',
+            'xtick.top': False,
+            'ytick.color': 'dimgrey',
+            'ytick.direction': 'out',
+            'ytick.left': False,
+            'ytick.right': False}
+        plt.rcParams.update(rc)
+        plt.rc('text', usetex = False)
+        for j in range(5):
+            fig, ax = plt.subplots( 4,2, figsize=(16,15) )
+            for x_batch, y_batch in testloader:
+                y_batch = y_batch.float().to(device)
+                x_batch = x_batch.float().to(device)
+                for i in range(4):
+                    x_hat, y_hat, _, yvar, xvar = self.forward(x_batch, fac*pow(100,i))
+                    # print(x_hat.shape, y_hat.shape, yvar.shape, xvar.shape)
+                    ## PLOT THINGS ABOUT THE R
+                    curve=y_batch[j,:].cpu().detach().numpy()
+                    ax[i][0].plot((omega_fine).reshape([-1]), curve, '--', label='R('+str(fac*pow(100,i))+')', color='blue')    
+                    Rhat = y_hat.cpu().detach().numpy()[j, :]
+                    yerr = abs(Rhat-yvar.cpu().detach().numpy()[j, :])
+                    fill_up = Rhat+yerr
+                    fill_down = Rhat-yerr
+                    fill_down[fill_down<0]= 0
+                    ax[i][0].fill_between(omega_fine.reshape([-1]), fill_up, fill_down, alpha=1, color='orange')
+                    ax[i][0].set_xlim([0,400])
+                    ax[i][0].legend(loc='upper right')
+                    ## PLOT THINGS ABOUT THE E
+                    curve=x_batch[j,:].cpu().detach().numpy()
+                    ax[i][1].plot( (tau).reshape([-1]), curve, label='E', color='blue')    
+                    Ehat = x_hat.cpu().detach().numpy()[j, :]
+                    yerr = abs(Ehat-xvar.cpu().detach().numpy()[j, :])
+                    # print(Ehat.shape, tau.shape)
+                    ax[i][1].errorbar(tau.reshape([-1]), Ehat, yerr=yerr, fmt='x', linewidth=2, ms = 1, label='Ehat', color='orange')
+                    ax[i][1].set_yscale('log')
+                    ax[i][1].legend(loc='upper right')
+                    ax[i][0].set_xlabel('$ \\omega (MeV)$')
+                    ax[i][1].set_xlabel('$ \\tau (MeV^{-1})$')
+                    ax[i][0].set_ylabel('$ R(\\omega)(MeV^{-1})$')
+                    ax[i][1].set_ylabel('$ E(\\tau)$')
+                fig.suptitle('Reconstructions $R, E$ with increasing error $(\\sigma)$ in the input Euclidean', fontsize=16)
+                fig.tight_layout()
+                plt.savefig(save_dir+filee+str(epoch)+'_'+str(j)+".png", dpi=300)
+                plt.close()
+                break
+        return
+
+
+    ####################################################################################
+    def fit(self, trainloader, testloader_one, testloader_two,  omega, tau, epochs,\
+        batch_size, lr, save_dir, model_name, flag, configs):
+        self.train()
+        obs = len(trainloader)*batch_size
+        LR = []
+        LE = []
+        optimiser = torch.optim.RMSprop(self.parameters(),\
+            lr=lr, weight_decay=0.0001)
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimiser, gamma=0.99)
+        ####################################################################################
+        epoch = 0
+        while epoch < epochs:
+            epoch += 1
+            current_loss=0
+            current_loss_E = 0
+            current_loss_R = 0
+            batches = 0
+            progress = 0
+            factor_R= configs['factor_R']
+            factor_E =configs['factor_E']
+            fac_var  = configs['fac_var']
+            sched_factor=configs['sched_factor']
+            ####################################################################################
+            ####################################################################################
+            if epoch % int(round(epochs*0.2))==0:
+                if factor_E<1:
+                    factor_R=  factor_R*sched_factor
+                    factor_E = factor_E*sched_factor
+                    fac_var  = fac_var*sched_factor
+                else:
+                    factor_R = 1e5
+                    factor_E = 1
+                    fac_var  = 1
+            
+            ####################################################################################
+            for x_batch, y_batch in trainloader:
+                batches += 1
+                optimiser.zero_grad()
+                ####################################################################################
+                x_batch = x_batch.float()
+                x_batch   = x_batch.to(device)
+
+                y_batch = y_batch.float().to(device)
+                
+                xhat, yhat, xNhat, _, x_batch_N = self.forward(x_batch)
+                loss, E_L, R_L = self.loss_func( xhat, xNhat, yhat, x_batch,\
+                                                x_batch_N, y_batch, \
+                                                [factor_R, factor_E, fac_var] )
+                current_loss      += (1/batches) * (loss.cpu().item() - current_loss)
+                current_loss_E    += (1/batches) * (E_L.cpu().item() - current_loss_E)
+                current_loss_R    += (1/batches) * (R_L.cpu().item() - current_loss_R)
+                loss.backward()
+                optimiser.step()
+                progress += x_batch.size(0)
+                sys.stdout.write('\rEpoch: %d, Progress: %d/%d, Loss: %f, Loss_R: %f, Loss_E: %f' %(epoch,\
+                progress, obs, current_loss, current_loss_R, current_loss_E) )
+                # print('\rEpoch: %d, Progress: %d/%d,\
+                # Loss: %f' %(epoch, progress, obs, current_loss))
+                sys.stdout.flush()
+                # profiler.step()
+                ####################################################################################
+            
+            
+            # Printing and saving code 
+            if epoch % 1 ==0:
+                if flag==0:
+                    print("########################################################")
+                    print("\n One Peak")
+                    torch.save(self.state_dict(), model_name)
+                    _,_=self.evaluate_METRICS(testloader_one, fac_var, save_dir, epoch, filee='one_peak')
+                    self.evaluate_plots(testloader_one, omega, tau, epoch,\
+                         save_dir, filee='one_peak', fac=fac_var)
+                elif flag==1:
+                    print("########################################################")
+                    print("\n Two Peak")
+                    torch.save(self.state_dict(), model_name)
+                    _,_=self.evaluate_METRICS(testloader_two, fac_var, save_dir, epoch, filee='two_peak')
+                    self.evaluate_plots(testloader_two, omega, tau, epoch, save_dir, filee='two_peak', fac=fac_var)
+                    print("########################################################")
+                else:
+                    print("########################################################")
+                    print("\n One Peak")
+                    _,_=self.evaluate_METRICS(testloader_one, fac_var, save_dir, epoch, filee='one_peak')
+                    self.evaluate_plots(testloader_one, omega, tau, epoch,\
+                         save_dir, filee='one_peak', fac=fac_var)
+                    print("########################################################")
+                    print("Two Peak")
+                    _,_=self.evaluate_METRICS(testloader_two, fac_var, save_dir, epoch, filee='two_peak')
+                    self.evaluate_plots(testloader_two, omega, tau, epoch,\
+                         save_dir, filee='two_peak', fac=fac_var)    
+                    torch.save(self.state_dict(), model_name)
+                    print("########################################################")
+        
+        return self
+
+
+
+
+
+    
+
+#####################################################################
+# Get the new model
 class Network_selector(nn.Module):
     def __init__(self, input_shape=151, k=2):
         super(Network_selector, self).__init__()

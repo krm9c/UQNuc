@@ -1,9 +1,9 @@
 #!/bin/bash
 ##!/bin/bash
 
-############################################################
-## THIS IS THE SCRIPT WITH NOISE AND THE VARIANCE CORRECTION.
-############################################################
+###########################################################
+# THIS IS THE SCRIPT WITH NOISE AND THE VARIANCE CORRECTION.
+###########################################################
 
 ## The following is for running on theta gpu
 export http_proxy=http://proxy.tmi.alcf.anl.gov:3128
@@ -30,5 +30,8 @@ export https_proxy=http://proxy.tmi.alcf.anl.gov:3128
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate tork
 
-python uq.py --method 'UQ' --flag 2 --load 1 --runs 1
+
+# mkdir one_peak_test
+python uq.py --method 'PRC' --flag 0 --load 1 --runs 1
+
 conda deactivate

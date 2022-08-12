@@ -23,12 +23,11 @@ export https_proxy=http://proxy.tmi.alcf.anl.gov:3128
 # fi
 # unset __conda_setup
 # # <<< conda initialize <<<
-# conda activate posei
-
-
+# conda activate tork
 ## The following is for running on JLSE
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate tork
 
-python uq.py --method 'UQ' --flag 2 --load 1 --runs 1
+python uq.py --method 'PRC' --flag 3 --load 1 --runs 1
+
 conda deactivate

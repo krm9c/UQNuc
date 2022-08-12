@@ -56,6 +56,11 @@ parser.add_argument(
     default='false',
     help="one peak, two peak, uncertainty, original")
 
+parser.add_argument(
+    '--method',
+    default='UQ',
+    help="one peak, two peak, uncertainty, original")
+
 
 if __name__ == '__main__':
     # Load the parameters from json file
@@ -75,6 +80,9 @@ if __name__ == '__main__':
     if args.flag is not None:
         params['flag'] = int(args.flag)
 
+    if args.method is not None:
+        params['method'] = str(args.method)
+
     if params["flag"] ==3:
         params['fac_var']=-1
 
@@ -83,6 +91,7 @@ if __name__ == '__main__':
     load=params['load']
     flag=params['flag']
     batche=params['batche']
+    method =params['method']
     epochs=params['epochs']
     learning_rate=params['learning_rate']
     n_data=params['n_points']
@@ -118,106 +127,212 @@ if __name__ == '__main__':
         ## The device
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-        
-        if flag==0:
-            print("one peaks")
-            save_dir = 'results/sample_one_peak/'
-            model_ref = 'results/models/modella_uncert_one'+str(runs)
+        if method == 'PRC':
 
-            tau = x['tau']
-            omega_fine=x['omega_fine']
-            omega=x['omega']
-            R = np.concatenate([x['One_Peak_R_interp'][0:n_data]], axis=0)
-            E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
-            print(E.shape, R.shape)
-            # print("I defined the network")
-            Kern = Kern.astype('float64')
-            Kern_R[:, (Kern_R.shape[1]-1)] = 1
-            print(torch.cuda.is_available())
-            torch.pi = torch.acos(torch.zeros(1)).item() 
-            x = torch.from_numpy(E)
-            y = torch.from_numpy(R)
-            trainset = MyDataset(x, y)
-            trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
-            rbfnet = Network(Kern, Kern_R)
-            if load==0:
-                rbfnet.load_state_dict(torch.load(model_ref))
-            rbfnet.to(device)
-            rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_one, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
-        
-        elif flag==1:
-            print("two peaks")
-            save_dir = 'results/sample_two_peak/'
-            model_ref = 'results/models/modella_uncert_two'+str(runs)
-            tau = x['tau']
-            omega_fine=x['omega_fine']
-            omega=x['omega']
-            R = np.concatenate([x['Two_Peak_R_interp'][0:n_data]], axis=0)
-            E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
-            print(E.shape, R.shape)
-            # print("I defined the network")
-            Kern = Kern.astype('float64')
-            Kern_R[:, (Kern_R.shape[1]-1)] = 1
-            print(torch.cuda.is_available())
-            torch.pi = torch.acos(torch.zeros(1)).item() 
-            x = torch.from_numpy(E)
-            y = torch.from_numpy(R)
-            trainset = MyDataset(x, y)
-            trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
-            rbfnet = Network(Kern, Kern_R)
-            if load==0:
-                rbfnet.load_state_dict(torch.load(model_ref))
-            rbfnet.to(device)
-            rbfnet =  rbfnet.fit(trainloader, testloader_two, testloader_two, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
-        
-        elif flag==3:
-            print("both peaks, without noise")
-            save_dir = 'results/sample_inverse/'
-            model_ref = 'results/models/modella_both_'+str(runs)
-            tau = x['tau']
-            omega_fine=x['omega_fine']
-            omega=x['omega']
-            R = np.concatenate([x['One_Peak_R_interp'], x['Two_Peak_R_interp']], axis=0)
-            E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
-            print(E.shape, R.shape)
-            # print("I defined the network")
-            Kern = Kern.astype('float64')
-            Kern_R[:, (Kern_R.shape[1]-1)] = 1
-            print(torch.cuda.is_available())
-            torch.pi = torch.acos(torch.zeros(1)).item() 
-            x = torch.from_numpy(E)
-            y = torch.from_numpy(R)
-            trainset = MyDataset(x, y)
-            trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
-            rbfnet = Network(Kern, Kern_R)
-            if load==0:
-                rbfnet.load_state_dict(torch.load(model_ref))
-            rbfnet.to(device)
-            rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
+            print(method)
+            if flag==0:
+                print("one peaks")
+                save_dir = 'results/sample_one_peak_PRC/'
+                model_ref = 'results/models/modella_uncert_one_PRC_'+str(runs)
+
+                tau = x['tau']
+                omega_fine=x['omega_fine']
+                omega=x['omega']
+                R = np.concatenate([x['One_Peak_R_interp'][0:n_data]], axis=0)
+                E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
+                print(E.shape, R.shape)
+                # print("I defined the network")
+                Kern = Kern.astype('float64')
+                Kern_R[:, (Kern_R.shape[1]-1)] = 1
+                print(torch.cuda.is_available())
+                torch.pi = torch.acos(torch.zeros(1)).item() 
+                x = torch.from_numpy(E)
+                y = torch.from_numpy(R)
+                trainset = MyDataset(x, y)
+                trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
+                rbfnet = NetworkPRC(Kern, Kern_R)
+                if load==0:
+                    rbfnet.load_state_dict(torch.load(model_ref))
+                rbfnet.to(device)
+                rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_one, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
+            
+            elif flag==1:
+                print("two peaks")
+                save_dir = 'results/sample_two_peak_PRC/'
+                model_ref = 'results/models/modella_uncert_two_PRC_'+str(runs)
+                tau = x['tau']
+                omega_fine=x['omega_fine']
+                omega=x['omega']
+                R = np.concatenate([x['Two_Peak_R_interp'][0:n_data]], axis=0)
+                E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
+                print(E.shape, R.shape)
+                # print("I defined the network")
+                Kern = Kern.astype('float64')
+                Kern_R[:, (Kern_R.shape[1]-1)] = 1
+                print(torch.cuda.is_available())
+                torch.pi = torch.acos(torch.zeros(1)).item() 
+                x = torch.from_numpy(E)
+                y = torch.from_numpy(R)
+                trainset = MyDataset(x, y)
+                trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
+                rbfnet = NetworkPRC(Kern, Kern_R)
+                if load==0:
+                    rbfnet.load_state_dict(torch.load(model_ref))
+                rbfnet.to(device)
+                rbfnet =  rbfnet.fit(trainloader, testloader_two, testloader_two, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
+            
+            elif flag==3:
+                print("both peaks, without noise")
+                save_dir = 'results/sample_inverse_PRC/'
+                model_ref = 'results/models/modella_both__PRC_'+str(runs)
+                tau = x['tau']
+                omega_fine=x['omega_fine']
+                omega=x['omega']
+                R = np.concatenate([x['One_Peak_R_interp'][0:n_data], x['Two_Peak_R_interp'][0:n_data]], axis=0)
+                E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
+                print(E.shape, R.shape)
+                # print("I defined the network")
+                Kern = Kern.astype('float64')
+                Kern_R[:, (Kern_R.shape[1]-1)] = 1
+                print(torch.cuda.is_available())
+                torch.pi = torch.acos(torch.zeros(1)).item() 
+                x = torch.from_numpy(E)
+                y = torch.from_numpy(R)
+                trainset = MyDataset(x, y)
+                trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
+                rbfnet = NetworkPRC(Kern, Kern_R)
+                if load==0:
+                    rbfnet.load_state_dict(torch.load(model_ref))
+                rbfnet.to(device)
+                rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
+            else:
+                print("both peaks")
+                save_dir = 'results/sample_uncert_PRC/'
+                model_ref = 'results/models/modella_uncert_PRC_'+str(runs)
+                tau = x['tau']
+                omega_fine=x['omega_fine']
+                omega=x['omega']
+                R = np.concatenate([x['One_Peak_R_interp'][0:n_data], x['Two_Peak_R_interp'][0:n_data]], axis=0)
+                E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
+                print(E.shape, R.shape)
+                # print("I defined the network")
+                Kern = Kern.astype('float64')
+                Kern_R[:, (Kern_R.shape[1]-1)] = 1
+                print(torch.cuda.is_available())
+                torch.pi = torch.acos(torch.zeros(1)).item() 
+                x = torch.from_numpy(E)
+                y = torch.from_numpy(R)
+                trainset = MyDataset(x, y)
+                trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
+                rbfnet = NetworkPRC(Kern, Kern_R)
+                if load==0:
+                    rbfnet.load_state_dict(torch.load(model_ref))
+                rbfnet.to(device)
+                rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, epochs, batche,\
+                                        learning_rate, save_dir, model_ref, flag, params)
+            torch.save(rbfnet.state_dict(), model_ref+str(runs))
+
         else:
-            print("both peaks")
-            save_dir = 'results/sample_uncert/'
-            model_ref = 'results/models/modella_uncert'+str(runs)
-            tau = x['tau']
-            omega_fine=x['omega_fine']
-            omega=x['omega']
-            R = np.concatenate([x['One_Peak_R_interp'][0:n_data], x['Two_Peak_R_interp'][0:n_data]], axis=0)
-            E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
-            print(E.shape, R.shape)
-            # print("I defined the network")
-            Kern = Kern.astype('float64')
-            Kern_R[:, (Kern_R.shape[1]-1)] = 1
-            print(torch.cuda.is_available())
-            torch.pi = torch.acos(torch.zeros(1)).item() 
-            x = torch.from_numpy(E)
-            y = torch.from_numpy(R)
-            trainset = MyDataset(x, y)
-            trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
-            rbfnet = Network(Kern, Kern_R)
-            if load==0:
-                rbfnet.load_state_dict(torch.load(model_ref))
-            rbfnet.to(device)
-            rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, epochs, batche,\
-                                 learning_rate, save_dir, model_ref, flag, params)
+            print(method)
+            if flag==0:
+                print("one peaks")
+                save_dir = 'results/sample_one_peak/'
+                model_ref = 'results/models/modella_uncert_one'+str(runs)
 
-        torch.save(rbfnet.state_dict(), model_ref+str(runs))
+                tau = x['tau']
+                omega_fine=x['omega_fine']
+                omega=x['omega']
+                R = np.concatenate([x['One_Peak_R_interp'][0:n_data]], axis=0)
+                E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
+                print(E.shape, R.shape)
+                # print("I defined the network")
+                Kern = Kern.astype('float64')
+                Kern_R[:, (Kern_R.shape[1]-1)] = 1
+                print(torch.cuda.is_available())
+                torch.pi = torch.acos(torch.zeros(1)).item() 
+                x = torch.from_numpy(E)
+                y = torch.from_numpy(R)
+                trainset = MyDataset(x, y)
+                trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
+                rbfnet = Network(Kern, Kern_R)
+                if load==0:
+                    rbfnet.load_state_dict(torch.load(model_ref))
+                rbfnet.to(device)
+                rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_one, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
+            
+            elif flag==1:
+                print("two peaks")
+                save_dir = 'results/sample_two_peak/'
+                model_ref = 'results/models/modella_uncert_two'+str(runs)
+                tau = x['tau']
+                omega_fine=x['omega_fine']
+                omega=x['omega']
+                R = np.concatenate([x['Two_Peak_R_interp'][0:n_data]], axis=0)
+                E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
+                print(E.shape, R.shape)
+                # print("I defined the network")
+                Kern = Kern.astype('float64')
+                Kern_R[:, (Kern_R.shape[1]-1)] = 1
+                print(torch.cuda.is_available())
+                torch.pi = torch.acos(torch.zeros(1)).item() 
+                x = torch.from_numpy(E)
+                y = torch.from_numpy(R)
+                trainset = MyDataset(x, y)
+                trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
+                rbfnet = Network(Kern, Kern_R)
+                if load==0:
+                    rbfnet.load_state_dict(torch.load(model_ref))
+                rbfnet.to(device)
+                rbfnet =  rbfnet.fit(trainloader, testloader_two, testloader_two, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
+            
+            elif flag==3:
+                print("both peaks, without noise")
+                save_dir = 'results/sample_inverse/'
+                model_ref = 'results/models/modella_both_'+str(runs)
+                tau = x['tau']
+                omega_fine=x['omega_fine']
+                omega=x['omega']
+                R = np.concatenate([x['One_Peak_R_interp'][0:n_data], x['Two_Peak_R_interp'][0:n_data]], axis=0)
+                E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
+                print(E.shape, R.shape)
+                # print("I defined the network")
+                Kern = Kern.astype('float64')
+                Kern_R[:, (Kern_R.shape[1]-1)] = 1
+                print(torch.cuda.is_available())
+                torch.pi = torch.acos(torch.zeros(1)).item() 
+                x = torch.from_numpy(E)
+                y = torch.from_numpy(R)
+                trainset = MyDataset(x, y)
+                trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
+                rbfnet = Network(Kern, Kern_R)
+                if load==0:
+                    rbfnet.load_state_dict(torch.load(model_ref))
+                rbfnet.to(device)
+                rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
+            else:
+                print("both peaks")
+                save_dir = 'results/sample_uncert/'
+                model_ref = 'results/models/modella_uncert'+str(runs)
+                tau = x['tau']
+                omega_fine=x['omega_fine']
+                omega=x['omega']
+                R = np.concatenate([x['One_Peak_R_interp'][0:n_data], x['Two_Peak_R_interp'][0:n_data]], axis=0)
+                E, R, Kern, Kern_R = integrate(tau, omega, omega_fine, R)
+                print(E.shape, R.shape)
+                # print("I defined the network")
+                Kern = Kern.astype('float64')
+                Kern_R[:, (Kern_R.shape[1]-1)] = 1
+                print(torch.cuda.is_available())
+                torch.pi = torch.acos(torch.zeros(1)).item() 
+                x = torch.from_numpy(E)
+                y = torch.from_numpy(R)
+                trainset = MyDataset(x, y)
+                trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
+                rbfnet = Network(Kern, Kern_R)
+                if load==0:
+                    rbfnet.load_state_dict(torch.load(model_ref))
+                rbfnet.to(device)
+                rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, epochs, batche,\
+                                        learning_rate, save_dir, model_ref, flag, params)
+
+            torch.save(rbfnet.state_dict(), model_ref+str(runs))
