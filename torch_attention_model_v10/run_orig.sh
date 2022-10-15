@@ -28,6 +28,6 @@ export https_proxy=http://proxy.tmi.alcf.anl.gov:3128
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate tork
 
-python uq.py --method 'UQ' --flag 3 --load 1 --runs 1
+python uq.py --method 'UQ' --flag 3 --load 0 --runs 1
 
 conda deactivate

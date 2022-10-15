@@ -32,6 +32,6 @@ conda activate tork
 
 
 # mkdir one_peak_test
-python uq.py --method 'PRC' --flag 0 --load 1 --runs 1
+python uq.py --method 'PRC' --flag 0 --load 0 --runs 1
 
 conda deactivate

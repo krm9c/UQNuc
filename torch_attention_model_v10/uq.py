@@ -96,6 +96,7 @@ if __name__ == '__main__':
     learning_rate=params['learning_rate']
     n_data=params['n_points']
 
+
     for runs in range(n_runs):
         ## Theta
         # x = return_dict('/grand/NuQMC/UncertainityQ/theta_JLSE_Port/inverse_data_interpolated_numpy.p')
@@ -124,17 +125,16 @@ if __name__ == '__main__':
         R_test_2 = torch.from_numpy(R_test_2)
         testset_two = MyDataset(E_test_2, R_test_2)
         testloader_two = DataLoader(testset_two, batch_size=128, shuffle=False)
+        
         ## The device
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
         if method == 'PRC':
-
             print(method)
             if flag==0:
                 print("one peaks")
                 save_dir = 'results/sample_one_peak_PRC/'
                 model_ref = 'results/models/modella_uncert_one_PRC_'+str(runs)
-
                 tau = x['tau']
                 omega_fine=x['omega_fine']
                 omega=x['omega']
@@ -152,11 +152,12 @@ if __name__ == '__main__':
                 trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
                 rbfnet = NetworkPRC(Kern, Kern_R)
                 if load==0:
-                    rbfnet.load_state_dict(torch.load(model_ref))
+                    rbfnet.load_state_dict(torch.load(model_ref+str(runs)))
                 rbfnet.to(device)
                 rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_one, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
             
             elif flag==1:
+                
                 print("two peaks")
                 save_dir = 'results/sample_two_peak_PRC/'
                 model_ref = 'results/models/modella_uncert_two_PRC_'+str(runs)
@@ -177,7 +178,7 @@ if __name__ == '__main__':
                 trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
                 rbfnet = NetworkPRC(Kern, Kern_R)
                 if load==0:
-                    rbfnet.load_state_dict(torch.load(model_ref))
+                    rbfnet.load_state_dict(torch.load(model_ref+str(runs)))
                 rbfnet.to(device)
                 rbfnet =  rbfnet.fit(trainloader, testloader_two, testloader_two, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
             
@@ -202,7 +203,7 @@ if __name__ == '__main__':
                 trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
                 rbfnet = NetworkPRC(Kern, Kern_R)
                 if load==0:
-                    rbfnet.load_state_dict(torch.load(model_ref))
+                    rbfnet.load_state_dict(torch.load(model_ref+str(runs)))
                 rbfnet.to(device)
                 rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
             else:
@@ -226,7 +227,7 @@ if __name__ == '__main__':
                 trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
                 rbfnet = NetworkPRC(Kern, Kern_R)
                 if load==0:
-                    rbfnet.load_state_dict(torch.load(model_ref))
+                    rbfnet.load_state_dict(torch.load(model_ref+str(runs)))
                 rbfnet.to(device)
                 rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, epochs, batche,\
                                         learning_rate, save_dir, model_ref, flag, params)
@@ -256,7 +257,7 @@ if __name__ == '__main__':
                 trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
                 rbfnet = Network(Kern, Kern_R)
                 if load==0:
-                    rbfnet.load_state_dict(torch.load(model_ref))
+                    rbfnet.load_state_dict(torch.load(model_ref+str(runs)))
                 rbfnet.to(device)
                 rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_one, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
             
@@ -281,10 +282,9 @@ if __name__ == '__main__':
                 trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
                 rbfnet = Network(Kern, Kern_R)
                 if load==0:
-                    rbfnet.load_state_dict(torch.load(model_ref))
+                    rbfnet.load_state_dict(torch.load(model_ref+str(runs)))
                 rbfnet.to(device)
                 rbfnet =  rbfnet.fit(trainloader, testloader_two, testloader_two, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
-            
             elif flag==3:
                 print("both peaks, without noise")
                 save_dir = 'results/sample_inverse/'
@@ -306,9 +306,10 @@ if __name__ == '__main__':
                 trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
                 rbfnet = Network(Kern, Kern_R)
                 if load==0:
-                    rbfnet.load_state_dict(torch.load(model_ref))
+                    rbfnet.load_state_dict(torch.load(model_ref+str(runs)))
                 rbfnet.to(device)
-                rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
+                rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, \
+                          omega_fine, tau, epochs, batche, learning_rate, save_dir, model_ref, flag,params)
             else:
                 print("both peaks")
                 save_dir = 'results/sample_uncert/'
@@ -330,9 +331,12 @@ if __name__ == '__main__':
                 trainloader = DataLoader(trainset, batch_size=batche, shuffle=True)
                 rbfnet = Network(Kern, Kern_R)
                 if load==0:
-                    rbfnet.load_state_dict(torch.load(model_ref))
+                    rbfnet.load_state_dict(torch.load(model_ref+str(runs)))
+
                 rbfnet.to(device)
-                rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two, omega_fine, tau, epochs, batche,\
-                                        learning_rate, save_dir, model_ref, flag, params)
+
+                rbfnet =  rbfnet.fit(trainloader, testloader_one, testloader_two,\
+                omega_fine, tau, epochs, batche,\
+                learning_rate, save_dir, model_ref, flag, params)
 
             torch.save(rbfnet.state_dict(), model_ref+str(runs))
