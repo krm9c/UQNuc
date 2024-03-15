@@ -186,7 +186,8 @@ def return_data(params):
         testloader= DataLoader(testset, batch_size=batche, shuffle=False)
         
         return trainloader,testloader, Kern, Kern_R, tau, omega_fine,\
-            np.concatenate([E_test_1, E_test_2], axis=0), np.concatenate([R_test_1, R_test_2], axis=0) 
+            np.concatenate([E_test_1, E_test_2], axis=0),\
+            np.concatenate([R_test_1, R_test_2], axis=0) 
 
 # -------------------------------------------------------------------------------------------------------------  
 def train_model(stuff):
