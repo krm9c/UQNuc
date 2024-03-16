@@ -5,9 +5,7 @@ import json
 import os
 import signal
 import sys
-import pathlib
 import itertools
-import time
 
 #-------------------------------------------
 ## Gather the reconstructions from my model
@@ -490,7 +488,11 @@ if __name__ == '__main__':
             pool.map(train_model, stuff)
 
     print("We are starting to plot")
-    # -------------------------------------------------------------------------------------------------------------  
+    
+# ------------------------------------------------------------------------------------------------------------------
+    
+    
+# -------------------------------------------------------------------------------------------------------------  
     if args.plot:
         for i in range(n_models__):
             model_path = f"../Results/models/{flag}_Trained_model_{str(i)}"

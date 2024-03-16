@@ -1,7 +1,7 @@
 {
     "n_runs": 1,
     "batche": 128,
-    "epochs": 6750,
+    "epochs": 675,
     "learning_rate": 1e-4,
     "n_points": 500000,
     "sched_factor": 10,
