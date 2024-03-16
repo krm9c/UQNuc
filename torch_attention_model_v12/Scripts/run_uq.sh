@@ -1,0 +1,50 @@
+#!/bin/bash
+##!/bin/bash
+
+############################################################
+## THIS IS THE SCRIPT WITH NOISE AND THE VARIANCE CORRECTION.
+############################################################
+
+## The following is for running on theta gpu
+# export http_proxy=http://proxy.tmi.alcf.anl.gov:3128
+# export https_proxy=http://proxy.tmi.alcf.anl.gov:3128
+
+# >>> conda initialize >>>
+# !! Contents within this block are managed by 'conda init' !!
+# __conda_setup="$('/lus/theta-fs0/software/thetagpu/conda/2021-06-26/mconda3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+# if [ $? -eq 0 ]; then
+#     eval "$__conda_setup"
+# else
+#     if [ -f "/lus/theta-fs0/software/thetagpu/conda/2021-06-26/mconda3/etc/profile.d/conda.sh" ]; then
+#         . "/lus/theta-fs0/software/thetagpu/conda/2021-06-26/mconda3/etc/profile.d/conda.sh"
+#     else
+#         export PATH="/lus/theta-fs0/software/thetagpu/conda/2021-06-26/mconda3/bin:$PATH"
+#     fi
+# fi
+# unset __conda_setup
+# # <<< conda initialize <<<
+# conda activate posei
+
+## The following is for running on JLSE
+source ~/miniconda3/etc/profile.d/conda.sh
+conda activate ML__torch
+
+# --------------------------------------------------------------------
+# mkdir one_peak_testsh
+# python ../uq.py --method 'UQ' --path '../../torch_attention_model_v11/UQ__runs/UQ__'  --flag 2 --load 0 --runs 1 --runs_total 1
+
+
+# ----------------------
+### One peak 
+python ../uq.py --method 'UQ' --path '../'  --flag 0 --load 1 --runs 1 --runs_total 1 -cuda True
+
+# ----------------------
+# ## Two peak
+python ../uq.py --method 'UQ' --path '../'  --flag 1 --load 1 --runs 2 --runs_total 1 -cuda True
+
+# ----------------------
+# Both Peak together
+# python ../uq.py --method 'UQ' --path '../'  --flag 2 --load 1 --runs 3 --runs_total 1 
+
+
+conda deactivate
